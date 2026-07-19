@@ -9,15 +9,15 @@ The single MLX profile passes its deterministic model self-test on the local
 qualified host. Its exact artifacts and runtime are pinned in the public
 address fixture.
 
-There is currently no committed real-model carrier fixture for the active
-codec. Historical carriers used a different codec and protocol labels, so
-retaining them would falsely imply compatibility.
+The committed real-model fixture completes an encode/decode/HPKE round trip for
+the active codec on the local qualification host. It contains ten LF characters
+and recovers all 114 stream bytes exactly. `K_all` is 12.3947 characters per
+stream byte; reference times are 132.13 s encode and 129.62 s decode.
 
 Before claiming interoperability:
 
 1. optimize candidate construction without changing the exact final tables;
-2. complete a real-model encode/decode round trip with the active codec;
-3. record `K_all`, tokens, entropy/progress, runtime, and carrier quality;
-4. exchange independently generated carriers between two clean compatible
+2. profile and improve carrier quality without altering arithmetic recovery;
+3. exchange independently generated carriers between two clean compatible
    installations;
-5. compare decoded bytes and plaintext bit-for-bit.
+4. compare decoded bytes and plaintext bit-for-bit.

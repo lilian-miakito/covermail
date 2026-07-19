@@ -67,7 +67,7 @@ uv run covermail decrypt .covermail/identities/ADDRESS_ID \
 ```
 
 `carrier-encode` reports `K_all`, visible characters, UTF-8 bytes, stream bytes,
-and token counts. A real carrier is not currently committed because the former
-fixture does not implement the active codec.
+and token counts. The active real-model round trip is recorded in
+`tests/fixtures/mlx_llama32_3b_4bit/fixture.json`.
 
 The normative implementation draft is [docs/protocol.md](docs/protocol.md).

@@ -261,7 +261,7 @@ The pure codec, crypto, context binding, canonical line endings, and fake-model
 round trips are automated. The pinned MLX profile passes its deterministic
 self-test.
 
-No real carrier fixture currently represents this exact protocol. The deleted
-fixture used a different candidate filter and an obsolete arithmetic skip rule.
-The next qualification step is a complete real-model round trip after candidate
-construction is made fast enough to inspect long low-entropy trajectories.
+The committed MLX fixture represents this exact protocol and completes a
+bit-identical stream recovery plus HPKE decryption. The next qualification step
+is cross-installation reproduction and improvement of candidate-construction
+runtime and carrier quality without changing the arithmetic tables.

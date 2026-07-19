@@ -1,0 +1,30 @@
+{
+  "carrier_base64": "SmUgdm91bGFpcyB0ZSByYWNvbnRlciBjYWxtZW1lbnQgY2UgcXVpIGVzdCBhcnJpdsOpIGF1IGphcmRpbi4gSGllciBzb2lyLCBqJ2FpIGZhaXQgdW5lIHBldGl0ZSB2aXNpdGUgw6AgbWVzIHZvaXNpbnMgZXQgamUgbGV1ciBhaSBwYXJsw6kgZGUgbWVzIHByb2pldHMgZGUgamFyZGluYWdlLiBJbHMgb250IMOpdMOpIHRyw6hzIHN5bXBhcyBldCBtJ29udCBkb25uw6kgcXVlbHF1ZXMgY29uc2VpbHMgb3JpZ2luYXV4IHBvdXIgYW3DqWxpb3JlciBsYSBzdHJ1Y3R1cmUgZGUgbCdhcmJyZSBkJ8OpcmFibGUgcXVlIGonYXZhaXMgcGxhbnTDqSBoaWVyLgoKTGUgcGx1cyBpbnTDqXJlc3NhbnQgZXN0IHF1J2lscyBtJ29udCBwYXJsw6kgZCd1bmUgdmFyacOpdMOpIGRlIGNldHRlIGVhdS1kZS12aWUgcmFyZSBxdSdpbHMgb250IHRyb3V2w6llIGV0IHF1J2lscyBtZSBwcm9wb3NlcyBkZSBwb3RlciBsYSBzdWl2cmUgw6l0w6kgZW4gw6l0w6kuIEplIG1lIHN1aXMgZGl0IHF1ZSBjJ8OpdGFpdCB1bmUgYm9ubmUgaWTDqWUgcG91ciBlc3NheWVyIHF1ZWxxdWUgY2hvc2UgZGUgbm91dmVhdSBhdSBsaWV1IGRlIGxhIHZvZGthIGhhYml0dWVsbGUuCgpKZSB2YWlzIGVzc2F5ZXIgZGUgcHLDqXBhcmVyIGNlbGEgw6l0w6kgZW4gZXNzYXlhbnQgZGUgZmFpcmUgbGEgcmFjaW5lLiBNYWlzIGwnw6ljaGVjIGRlIG1vbiBzb2wgbWUgZmFpdCB1biBwZXUgcsOpZmzDqWNoaXIgZXQgaidhaSBow6J0ZSBkJ29idGVuaXIgcXVlbHF1ZXMgY29uc2lnbmVzIGRlIG1vbiB2b2lzaW4gcG91ciBtJ2FpZGVyIMOgIHLDqW9yZ2FuaXNlciBsZSBzYWJsZSBldCBqZXRlciBkdSBncmF2aWVyIGF2YW50IGRlIGNvbW1lbmNlciBsYSBjb25zdHJ1Y3Rpb24gZGUgY2UgcGxhbnRpZXIgZW4gdHJlaWxsYWdlIGRlIG1vdXRvbnMgcXVlIGonYWkgZmFpdCBwYXIgcmFwcG9ydCBhIG1lcyBzb3V2ZW5pcnMgZCdlbmZhbmNlLgoKQSBwbHVzIHRhcmQgaidhdXJhaSBiaWVuIGZhaXQgZGUgcHLDqXZvaXIgcGx1cyBkZSB0ZW1wcyBwb3VyIGxhIGTDqWNvcmF0aW9uLCBkJ2FjaGV0ZXIgcGx1cyBkZSBzb2wgZXQgZGUgYmllbiBmYWlyZSBsZXMgZMOpY2hldHMgLiBFbiByw6lhbGl0w6kgdG91dCBjZWxhIHNvcnRhIGQnZXN0w6lyaWV1ciBjZSBxdWUgaidhdmFpcyBkZSBiaWVuIGRhbnMgY2UgcXVhcnRpZXIgcXVlIGonYWkgY29ubnUuIAoKw4AgYmllbnTDtHQgYWxvcnMgISBRdWUgdHUgdmFzIGJpZW4gY2FyIGplIHN1cHBvc2UgdW4gYmVhdSB0ZW1wcyBkb2l0IGZpbmlyIGJpZW50w7R0LiDDh2EgcmVzdGUgYmllbiBlbnRlbmR1IHBvdXIgdW5lIHByb2NoYWluZSB2aXNpdGUgc2kgdHUgZXMgbGlicmUuCgpKZSBtZSBzZW5zIGJpZW4gY2FyIGonYWkgYmllbiBmYWl0IGRlIHByZW5kcmUgbGUgdGVtcHMgZGUgZmFpcmUgdW5lIHBldGl0ZSBwcm9tZW5hZGUgZXQgZGUgbWUgZMOpdGVuZHJlIHVuIHBldS4=",
+  "metrics": {
+    "characters_all": 1413,
+    "confirmed_bits": 915,
+    "data_tokens": 345,
+    "finish_tokens": 28,
+    "line_feeds": 10,
+    "primer_tokens": 18,
+    "source_bits_read": 947,
+    "tokens_all": 391,
+    "utf8_bytes_all": 1454
+  },
+  "plaintext": "On se retrouve jeudi à 18 h.",
+  "primer": "Je voulais te raconter calmement ce qui est arrivé au jardin.",
+  "ratios": {
+    "bits_per_all_token": 2.3324808184143224,
+    "bits_per_data_token": 2.643478260869565,
+    "k_all_characters_per_stream_byte": 12.394736842105264,
+    "k_all_utf8_bytes_per_stream_byte": 12.75438596491228
+  },
+  "stream_base64": "b6Jtd9FZcyd0CKdB9cLICb3ju7zjNVnL8OaZQyw6sBwy7LVh62Fa9kKE+p6RDtFL8WrlmdqcxgzrcQVQIVH13qWFLsnWZuP0uCuSr7yHnAzhcywDsTq0ectVO98uuGq4QQxDdZFwGFOZTGEXxn0PGmPu",
+  "stream_bits": 912,
+  "stream_bytes": 114,
+  "subject": "Des nouvelles du jardin",
+  "timing_seconds": {
+    "decode": 129.62,
+    "encode": 132.13
+  }
+}

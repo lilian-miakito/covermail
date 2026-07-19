@@ -37,5 +37,8 @@ The current model self-test is recorded in
 - digest: `696baa21246bef6026ae86fce59e7f8b4116a74f525db56b8e137e98b6e9bf13`;
 - selected token IDs: `[2998, 16968, 47838, 14896]`.
 
-The profile remains a local candidate until a complete carrier is generated
-and decoded in practical time on at least two clean compatible installations.
+The local fixture completes a real-model round trip in 132.13 s encode and
+129.62 s decode. Its 391-token carrier includes ten LF characters and reaches
+`K_all = 12.3947`. The profile remains a local candidate until the same result
+is reproduced across two clean compatible installations and carrier quality is
+acceptable.
