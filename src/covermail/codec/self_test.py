@@ -12,6 +12,7 @@ from covermail.codec.frequencies import table_counts
 from covermail.errors import ModelCompatibilityError
 
 SELF_TEST_SUBJECT = "Covermail deterministic compatibility test"
+SELF_TEST_PRIMER_V2 = "Je voulais te donner quelques nouvelles tranquillement."
 SELF_TEST_STEPS = 4
 
 
@@ -26,13 +27,15 @@ def compute_self_test(
     model: TokenModel,
     rendered_prompt: str,
     path_indices: Sequence[int],
+    *,
+    initial_prefix: Sequence[int] = (),
 ) -> SelfTestResult:
     """Compute the exact Section 16 transcript and SHA-256 digest."""
     if len(path_indices) != SELF_TEST_STEPS:
         raise ValueError("v1 self-test requires exactly four steps")
     prompt_digest = hashlib.sha256(rendered_prompt.encode("utf-8", errors="strict")).digest()
     transcript = bytearray()
-    prefix: list[int] = []
+    prefix = list(initial_prefix)
     selected: list[int] = []
     for state, path_index in enumerate(path_indices):
         table = model.next_table(prefix)
@@ -62,8 +65,15 @@ def verify_self_test(
     rendered_prompt: str,
     path_indices: Sequence[int],
     expected_sha256: str,
+    *,
+    initial_prefix: Sequence[int] = (),
 ) -> SelfTestResult:
-    result = compute_self_test(model, rendered_prompt, path_indices)
+    result = compute_self_test(
+        model,
+        rendered_prompt,
+        path_indices,
+        initial_prefix=initial_prefix,
+    )
     if result.sha256 != expected_sha256:
         raise ModelCompatibilityError("model compatibility self-test failed")
     return result

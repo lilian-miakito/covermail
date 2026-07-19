@@ -1,4 +1,6 @@
-"""The fixed Covermail v1 HPKE Base ciphersuite wrapper."""
+"""The fixed Covermail HPKE Base ciphersuite wrappers."""
+
+import hashlib
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.asymmetric import x25519
@@ -7,10 +9,14 @@ from cryptography.hazmat.primitives.hpke import AEAD, KDF, KEM, Suite
 from covermail.address.canonical import decode_base64url
 from covermail.address.fingerprint import address_digest
 from covermail.address.schema import Address
+from covermail.cover.primer import validate_primer
+from covermail.cover.transport import canonical_subject
 from covermail.errors import DecryptionError
 from covermail.protocol.outer_frame import outer_header
 
 HPKE_INFO_LABEL = b"covermail/hpke/v1\x00"
+HPKE_V2_INFO_LABEL = b"covermail/hpke/v2\x00"
+VISIBLE_CONTEXT_LABEL = b"covermail/visible-context/v2\x00"
 HPKE_SUITE = Suite(KEM.X25519, KDF.HKDF_SHA256, AEAD.AES_128_GCM)
 HPKE_ENCAPSULATED_KEY_BYTES = 32
 HPKE_TAG_BYTES = 16
@@ -18,6 +24,28 @@ HPKE_TAG_BYTES = 16
 
 def hpke_info(address: Address) -> bytes:
     return HPKE_INFO_LABEL + address_digest(address) + outer_header(address)
+
+
+def visible_context_digest(subject: str, primer: str) -> bytes:
+    subject_raw = canonical_subject(subject).encode("utf-8", errors="strict")
+    primer_raw = validate_primer(primer).encode("utf-8", errors="strict")
+    transcript = (
+        VISIBLE_CONTEXT_LABEL
+        + len(subject_raw).to_bytes(2, "big")
+        + subject_raw
+        + len(primer_raw).to_bytes(2, "big")
+        + primer_raw
+    )
+    return hashlib.sha256(transcript).digest()
+
+
+def hpke_info_v2(address: Address, subject: str, primer: str) -> bytes:
+    return (
+        HPKE_V2_INFO_LABEL
+        + address_digest(address)
+        + outer_header(address)
+        + visible_context_digest(subject, primer)
+    )
 
 
 def _public_key(address: Address) -> x25519.X25519PublicKey:
@@ -33,6 +61,15 @@ def encrypt_inner(address: Address, inner: bytes) -> bytes:
     return HPKE_SUITE.encrypt(inner, _public_key(address), info=hpke_info(address))
 
 
+def encrypt_inner_v2(address: Address, inner: bytes, subject: str, primer: str) -> bytes:
+    """Encrypt and authenticate the exact v2 visible subject and primer."""
+    return HPKE_SUITE.encrypt(
+        inner,
+        _public_key(address),
+        info=hpke_info_v2(address, subject, primer),
+    )
+
+
 def decrypt_inner(
     address: Address,
     private_key: x25519.X25519PrivateKey,
@@ -44,4 +81,24 @@ def decrypt_inner(
     except (InvalidTag, ValueError) as error:
         raise DecryptionError(
             "not an authentic message for the selected Covermail Address"
+        ) from error
+
+
+def decrypt_inner_v2(
+    address: Address,
+    private_key: x25519.X25519PrivateKey,
+    hpke_blob: bytes,
+    subject: str,
+    primer: str,
+) -> bytes:
+    """Authenticate v2 ciphertext and its exact visible context."""
+    try:
+        return HPKE_SUITE.decrypt(
+            hpke_blob,
+            private_key,
+            info=hpke_info_v2(address, subject, primer),
+        )
+    except (InvalidTag, ValueError) as error:
+        raise DecryptionError(
+            "not an authentic message for the selected Covermail Address and visible context"
         ) from error

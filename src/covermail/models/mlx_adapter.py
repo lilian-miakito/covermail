@@ -10,7 +10,11 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, cast
 
-from covermail.cover.prompt import ChatTemplateTokenizer, render_chat_prompt
+from covermail.cover.prompt import (
+    ChatTemplateTokenizer,
+    render_chat_prompt,
+    render_chat_prompt_v2,
+)
 from covermail.errors import ModelProfileError
 from covermail.models.manifest import verify_artifact_manifest
 
@@ -134,6 +138,11 @@ class MlxLanguageModel:
 
     def render_prompt(self, cover: Mapping[str, object], subject: str) -> str:
         return render_chat_prompt(self.chat_tokenizer, cover, subject)
+
+    def render_prompt_v2(
+        self, cover: Mapping[str, object], subject: str, primer: str
+    ) -> str:
+        return render_chat_prompt_v2(self.chat_tokenizer, cover, subject, primer)
 
     def tokenize(self, text: str) -> list[int]:
         token_ids = self._tokenizer.encode(text, add_special_tokens=False)

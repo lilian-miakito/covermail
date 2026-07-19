@@ -202,7 +202,9 @@ def _validate_model(value: object) -> None:
 
 def _validate_codec(value: object) -> None:
     codec = _object(value, "codec", _CODEC)
-    _literal(codec["id"], "codec.id", "cm-arithmetic-v1")
+    codec_id = _string(codec["id"], "codec.id", minimum=1, maximum=64, ascii_only=True)
+    if codec_id not in {"cm-arithmetic-v1", "cm-arithmetic-v2"}:
+        raise AddressValidationError("codec.id is not a supported arithmetic profile")
     top_n = _integer(codec["top_n"], "codec.top_n", 2, 512)
     multiplier = _integer(
         codec["candidate_pool_multiplier"], "codec.candidate_pool_multiplier", 1, 16
@@ -212,10 +214,17 @@ def _validate_codec(value: object) -> None:
     _literal(codec["frequency_total"], "codec.frequency_total", 32768)
     _literal(codec["logit_scale"], "codec.logit_scale", 1024)
     _integer(codec["temperature_milli"], "codec.temperature_milli", 100, 2000)
-    _integer(codec["length_bias_milli"], "codec.length_bias_milli", 0, 1000)
+    length_bias = _integer(codec["length_bias_milli"], "codec.length_bias_milli", 0, 1000)
     _integer(codec["finish_tokens"], "codec.finish_tokens", 0, 128)
     _literal(codec["visible_filter"], "codec.visible_filter", "cm-visible-email-v1")
-    _literal(codec["prompt_template"], "codec.prompt_template", "cm-email-one-paragraph-v1")
+    expected_prompt = (
+        "cm-email-one-paragraph-v1"
+        if codec_id == "cm-arithmetic-v1"
+        else "cm-email-continue-primer-v2"
+    )
+    _literal(codec["prompt_template"], "codec.prompt_template", expected_prompt)
+    if codec_id == "cm-arithmetic-v2" and length_bias != 0:
+        raise AddressValidationError("cm-arithmetic-v2 requires zero length bias")
 
     self_test = _object(codec["self_test"], "codec.self_test", _SELF_TEST)
     _literal(self_test["steps"], "codec.self_test.steps", 4)
@@ -225,7 +234,7 @@ def _validate_codec(value: object) -> None:
     ):
         raise AddressValidationError("codec.self_test.path_indices must be an integer array")
     if path != [0, 1, top_n - 1, 0]:
-        raise AddressValidationError("codec.self_test.path_indices is not the v1 path")
+        raise AddressValidationError("codec.self_test.path_indices is not the required path")
     digest = _string(
         self_test["expected_sha256"],
         "codec.self_test.expected_sha256",

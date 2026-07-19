@@ -10,7 +10,7 @@ documentation must not describe a local-candidate profile as supported.
 The old example address remains a schema-only placeholder. It must fail model
 artifact preparation and compatibility checks.
 
-## `darwin-arm64-mlx-v1` local candidate
+## `darwin-arm64-mlx-v1` runtime
 
 The first Stage 3 candidate deliberately has a narrow compatibility claim:
 
@@ -25,9 +25,9 @@ The first Stage 3 candidate deliberately has a narrow compatibility claim:
 - model: `mlx-community/Llama-3.2-3B-Instruct-4bit` at immutable revision
   `7f0dc925e0d0afb0322d96f9255cfddf2ba5636e`;
 - weights: MLX 4-bit safetensors only; `trust_remote_code=false`;
-- codec defaults under qualification: `top_n=64`, candidate-pool multiplier
-  `8`, temperature milli `1000`, length-bias milli `100`, and 32 finishing
-  tokens.
+- current codec defaults under qualification: `cm-arithmetic-v2`, `top_n=64`,
+  candidate-pool multiplier `8`, temperature milli `1000`, zero length bias,
+  and 32 finishing tokens.
 
 `top_n=64` is an intentional first-profile choice rather than a protocol
 change. It keeps the reference full-prefix copy-safe check measurable while
@@ -74,3 +74,29 @@ The candidate becomes supported only after:
 3. generation and recovery pass on two clean compatible installations;
 4. each installation decodes the other installation's independently generated
    carrier.
+
+## `cm-arithmetic-v2` current local candidate
+
+V2 is the single forward implementation. V1 fixtures remain only as regression
+evidence. V2 adds an exact first-sentence primer chosen by Bob, authenticates the
+canonical subject and primer in HPKE `info`, begins the coded stream with the
+random 32-byte HPKE encapsulated key, and masks every structured byte after it.
+
+The prompt continues the visible primer without a sentence limit. Candidate
+construction preserves the qualified relative logits with temperature 1 and
+zero visible-length penalty. It retains the existing deterministic top-512
+pool, visible/copy-safe filters, final top 64, 75% low-entropy bridge rule, and
+top-1 sentence closure.
+
+The exact fixture address is
+`tests/fixtures/mlx_llama32_3b_4bit_v2/address.json`. Its self-test digest is
+`ae035e8b95af629d5f552ed9e8635fb3e66b9f2fed03521978b77426552340a5`.
+On the qualification M3 Pro, a 114-byte stream produced 1318 visible Unicode
+characters, including primer and closure:
+
+```text
+K_all = 1318 / 114 = 11.5614 characters per stream byte
+```
+
+This single empirical point used 18 primer, 250 data, 81 bridge, and 10 finish
+tokens. Cross-installation qualification remains outstanding.

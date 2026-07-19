@@ -71,7 +71,7 @@ uv run covermail decrypt .covermail/identities/ADDRESS_ID \
 model is deterministic, so the same input frame always produces the same fake
 carrier fixture.
 
-## Stage 3 MLX local candidate
+## Stage 3 MLX cm-arithmetic-v2 local candidate
 
 The exact profile and its current limitations are documented in
 [`docs/model-profiles.md`](docs/model-profiles.md). Prepare an already downloaded
@@ -83,23 +83,43 @@ uv run covermail model-prepare \
   --source /path/to/exact/huggingface/snapshot \
   --destination .covermail/models/llama32-3b-4bit
 uv run covermail model-self-test \
-  tests/fixtures/mlx_llama32_3b_4bit/address.json \
-  --model-root .covermail/models/llama32-3b-4bit
+  tests/fixtures/mlx_llama32_3b_4bit_v2/address.json \
+  --model-root .covermail/models/llama32-3b-4bit \
+  --subject "Des nouvelles du jardin" \
+  --primer "Je voulais te raconter calmement ce qui est arrivé au jardin."
 ```
 
-Real carrier commands require the same visible subject at both ends and run the
-artifact/runtime/self-test checks before touching a frame:
+Create a v2 identity from that public template, then encrypt with the exact
+subject and visible first-sentence primer:
 
 ```console
-uv run covermail carrier-encode alice.covermail.json \
+uv run covermail identity-create \
+  tests/fixtures/mlx_llama32_3b_4bit_v2/address.json \
+  --identities-dir .covermail/identities-v2 \
+  --public-address alice-v2.covermail.json
+uv run covermail encrypt-v2 alice-v2.covermail.json \
+  --subject "Des nouvelles du jardin" \
+  --primer "Je voulais te raconter calmement ce qui est arrivé au jardin." \
+  --message secret.txt --output message.cm2
+uv run covermail carrier-encode alice-v2.covermail.json \
   --model-root .covermail/models/llama32-3b-4bit \
   --subject "Des nouvelles du jardin" \
-  --frame message.cm --output carrier.txt
-uv run covermail carrier-decode alice.covermail.json \
+  --primer "Je voulais te raconter calmement ce qui est arrivé au jardin." \
+  --frame message.cm2 --output carrier.v2.txt
+uv run covermail carrier-decode alice-v2.covermail.json \
   --model-root .covermail/models/llama32-3b-4bit \
   --subject "Des nouvelles du jardin" \
-  --carrier carrier.txt --output decoded.cm
+  --carrier carrier.v2.txt --output decoded.cm2 \
+  --primer-output decoded-primer.txt
+uv run covermail decrypt-v2 .covermail/identities-v2/ADDRESS_ID \
+  --subject "Des nouvelles du jardin" \
+  --primer "Je voulais te raconter calmement ce qui est arrivé au jardin." \
+  --stream decoded.cm2 --output recovered-v2.txt
 ```
+
+`carrier-encode` reports `k_all`, defined as every visible Unicode character
+(primer, bridge, data, and finish) divided by the v2 stream byte count. The
+committed 114-byte fixture measured `K_all = 11.5614`.
 
 Model preparation is the only step that may use a trusted downloaded snapshot.
 Sending and receiving load the qualified local tree offline. The committed real

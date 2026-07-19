@@ -2599,3 +2599,88 @@ The correct development posture is therefore:
 3. fail closed on every incompatibility;
 4. measure carrier capacity and detectability rather than asserting them;
 5. add features only after the preceding stage has interoperable fixtures.
+
+## 37. Prototype amendment: `cm-arithmetic-v2`
+
+This section is the normative prototype direction selected after the first real
+v1 carrier. For an address whose codec ID is `cm-arithmetic-v2`, this section
+supersedes the conflicting v1 prompt, framing, and visible-prefix rules above.
+V1 remains readable regression material and is not the forward real-model
+profile.
+
+### 37.1 Visible primer
+
+Bob MUST choose one exact visible first sentence before encryption. It MUST:
+
+- contain 1..512 UTF-8 bytes;
+- have no leading/trailing whitespace, CR, LF, tab, NUL, model control-token
+  substring, or forbidden Unicode control/surrogate/private/unassigned point;
+- contain exactly one character from `.!?`, at its final character;
+- round-trip through the qualified tokenizer exactly.
+
+The carrier is `primer || coded continuation || deterministic finish`. Alice
+extracts through the first terminal punctuation, initializes the visible token
+prefix with the primer, and starts arithmetic extraction after those tokens.
+
+### 37.2 Context-bound HPKE and uniformized stream
+
+The v2 visible-context digest is SHA-256 over:
+
+```text
+"covermail/visible-context/v2\0"
+|| uint16_be(len(subject_utf8)) || subject_utf8
+|| uint16_be(len(primer_utf8))  || primer_utf8
+```
+
+The HPKE `info` is:
+
+```text
+"covermail/hpke/v2\0" || address_digest || outer_header || context_digest
+```
+
+Split the HPKE output into its 32-byte encapsulated key `enc` and authenticated
+ciphertext. Construct:
+
+```text
+payload = outer_header || hpke_ciphertext
+tail = uvarint(len(payload)) || payload
+mask = HKDF-SHA256(
+    ikm=enc,
+    salt=address_digest,
+    info="covermail/stego-mask/v2\0" || context_digest,
+    length=len(tail),
+)
+v2_stream = enc || (tail XOR mask)
+```
+
+The mask is public uniformization, not additional confidentiality. Alice first
+recovers the fixed 32-byte `enc`, derives the mask, unmasks the length varint,
+then knows the exact arithmetic termination target.
+
+### 37.3 Prompt and candidates
+
+Prompt ID `cm-email-continue-primer-v2` asks the qualified model to continue the
+exact first sentence on the visible subject for as long as needed. It has no
+normative sentence-count limit. The secret is never included.
+
+Candidate construction remains the deterministic raw top-512 pool, v1 visible
+and full-prefix copy-safe filters, final top 64, temperature 1, and integer
+frequency normalization. V2 requires `length_bias_milli=0`: selected candidate
+probability ratios come directly from quantized LLM logits. No top-p, sampling,
+Viterbi, beam search, or best-of-N selection is used.
+
+The existing bridge rule remains: if one frequency exceeds 24576/32768, emit
+the top candidate without payload bits. After all real bits are confirmed, emit
+deterministic top-1 finish tokens until the carrier ends in `.`, `!`, or `?`.
+
+### 37.4 Capacity metric
+
+V2 does not impose a fixed visible length or sentence count. Implementations
+MUST report:
+
+```text
+K_all = visible Unicode code points / v2 stream bytes
+```
+
+`visible` includes primer, bridge, data, and finish tokens. Implementations MAY
+also report UTF-8 carrier bytes per stream byte and bits per data/all token.

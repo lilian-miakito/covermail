@@ -9,7 +9,13 @@ from typing import Any, cast
 
 from covermail.address.schema import Address, validate_address
 from covermail.codec.candidates import CandidateConfig, PromptedLanguageModel
-from covermail.codec.self_test import SELF_TEST_SUBJECT, SelfTestResult, verify_self_test
+from covermail.codec.self_test import (
+    SELF_TEST_PRIMER_V2,
+    SELF_TEST_SUBJECT,
+    SelfTestResult,
+    verify_self_test,
+)
+from covermail.cover.primer import validate_primer
 from covermail.errors import ModelProfileError
 from covermail.models.mlx_adapter import (
     MODEL_ID,
@@ -24,6 +30,7 @@ from covermail.models.mlx_adapter import (
 class LoadedProfile:
     model: PromptedLanguageModel
     rendered_prompt: str
+    primer_ids: tuple[int, ...]
     self_test: SelfTestResult
 
 
@@ -49,7 +56,12 @@ def _require_exact_profile(address: Address) -> tuple[Mapping[str, Any], Mapping
     return model, codec
 
 
-def load_profile(address: Address, model_root: Path, subject: str) -> LoadedProfile:
+def load_profile(
+    address: Address,
+    model_root: Path,
+    subject: str,
+    primer: str | None = None,
+) -> LoadedProfile:
     """Verify artifacts/runtime/self-test, then bind the ordinary subject prompt."""
     validated = validate_address(address)
     model_fields, codec = _require_exact_profile(validated)
@@ -65,7 +77,17 @@ def load_profile(address: Address, model_root: Path, subject: str) -> LoadedProf
         length_bias_milli=cast(int, codec["length_bias_milli"]),
     )
 
-    test_prompt = adapter.render_prompt(cover, SELF_TEST_SUBJECT)
+    codec_id = codec["id"]
+    if codec_id == "cm-arithmetic-v2":
+        test_prompt = adapter.render_prompt_v2(
+            cover,
+            SELF_TEST_SUBJECT,
+            SELF_TEST_PRIMER_V2,
+        )
+        test_primer_ids = adapter.tokenize(SELF_TEST_PRIMER_V2)
+    else:
+        test_prompt = adapter.render_prompt(cover, SELF_TEST_SUBJECT)
+        test_primer_ids = []
     test_model = PromptedLanguageModel(adapter, adapter.tokenize(test_prompt), config)
     self_test_fields = _mapping(codec["self_test"], "codec.self_test")
     path_indices = self_test_fields["path_indices"]
@@ -78,8 +100,19 @@ def load_profile(address: Address, model_root: Path, subject: str) -> LoadedProf
         test_prompt,
         cast(list[int], path_indices),
         cast(str, self_test_fields["expected_sha256"]),
+        initial_prefix=test_primer_ids,
     )
 
-    rendered_prompt = adapter.render_prompt(cover, subject)
+    if codec_id == "cm-arithmetic-v2":
+        if primer is None:
+            raise ModelProfileError("cm-arithmetic-v2 requires a visible primer")
+        exact_primer = validate_primer(primer)
+        rendered_prompt = adapter.render_prompt_v2(cover, subject, exact_primer)
+        primer_ids = adapter.tokenize(exact_primer)
+        if adapter.detokenize(primer_ids) != exact_primer:
+            raise ModelProfileError("visible primer does not round-trip through the tokenizer")
+    else:
+        rendered_prompt = adapter.render_prompt(cover, subject)
+        primer_ids = []
     prompted = PromptedLanguageModel(adapter, adapter.tokenize(rendered_prompt), config)
-    return LoadedProfile(prompted, rendered_prompt, result)
+    return LoadedProfile(prompted, rendered_prompt, tuple(primer_ids), result)

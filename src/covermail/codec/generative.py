@@ -1,8 +1,8 @@
-"""Frame-to-token and token-to-frame orchestration for cm-arithmetic-v1."""
+"""Byte-stream-to-token orchestration for Covermail arithmetic codecs."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from covermail.codec.arithmetic import ArithmeticBitEncoder, ArithmeticSymbolDecoder
@@ -30,6 +30,7 @@ MAX_FAKE_CARRIER_CHARACTERS = 200000
 
 @dataclass(frozen=True, slots=True)
 class CarrierMetrics:
+    primer_tokens: int
     data_tokens: int
     bridge_tokens: int
     finish_tokens: int
@@ -86,7 +87,31 @@ def encode_carrier(
     except OuterFrameError as error:
         raise CarrierGenerationError("input is not one complete stego frame") from error
 
-    source = FramedBitSource(stego_frame)
+    return encode_carrier_stream(
+        stego_frame,
+        model,
+        finish_tokens=finish_tokens,
+        maximum_characters=maximum_characters,
+    )
+
+
+def encode_carrier_stream(
+    stream: bytes,
+    model: TokenModel,
+    *,
+    initial_token_ids: Sequence[int] = (),
+    finish_tokens: int = DEFAULT_FINISH_TOKENS,
+    maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
+) -> CarrierResult:
+    """Map a validated byte stream after an optional visible primer to tokens."""
+    _validate_finish_limit(finish_tokens)
+    if not stream:
+        raise CarrierGenerationError("carrier byte stream is empty")
+    initial = list(initial_token_ids)
+    if model.tokenize(model.detokenize(initial)) != initial:
+        raise CarrierTokenizationError("initial visible token prefix is not copy-safe")
+
+    source = FramedBitSource(stream)
     read_offset = 0
 
     def read_bit() -> int:
@@ -106,11 +131,12 @@ def encode_carrier(
 
     decoder = ArithmeticSymbolDecoder(read_bit)
     mirror = ArithmeticBitEncoder(confirm)
-    token_ids: list[int] = []
+    token_ids = initial.copy()
+    primer_tokens = len(initial)
     data_tokens = 0
     bridge_tokens = 0
     consecutive_bridges = 0
-    token_guard = max(1024, len(stego_frame) * 64 + 1024)
+    token_guard = max(1024, len(stream) * 64 + 1024)
 
     while confirmed < source.real_bits:
         table = model.next_table(token_ids)
@@ -129,7 +155,7 @@ def encode_carrier(
                 raise CarrierArithmeticError("arithmetic mirror desynchronized")
             token_ids.append(table.candidates[symbol].token_id)
             data_tokens += 1
-        if len(token_ids) > token_guard:
+        if len(token_ids) - primer_tokens > token_guard:
             raise CarrierGenerationError("arithmetic coder failed to make progress")
 
     added_finish = 0
@@ -149,6 +175,7 @@ def encode_carrier(
         text=text,
         token_ids=tuple(token_ids),
         metrics=CarrierMetrics(
+            primer_tokens=primer_tokens,
             data_tokens=data_tokens,
             bridge_tokens=bridge_tokens,
             finish_tokens=added_finish,
@@ -166,12 +193,56 @@ def decode_carrier(
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
     maximum_payload_bytes: int = MAX_STEGO_PAYLOAD_BYTES,
 ) -> bytes:
-    """Recover one exact stego frame and validate suffix and finish tokens."""
+    """Recover one exact v1 stego frame and validate suffix and finish tokens."""
+
+    def resolve_v1_length(complete: bytes) -> int | None:
+        if complete:
+            try:
+                payload_length, header_bytes = decode_uvarint(complete, 0, max_bytes=3)
+            except EOFError:
+                return None
+            except ValueError as error:
+                raise CarrierArithmeticError("carrier has an invalid frame length") from error
+            if payload_length > maximum_payload_bytes:
+                raise CarrierArithmeticError("carrier frame declaration exceeds protocol limit")
+            return header_bytes + payload_length
+        return None
+
+    def validate_v1(frame: bytes) -> None:
+        try:
+            unpack_stego_frame(frame)
+        except OuterFrameError as error:
+            raise CarrierArithmeticError("recovered carrier frame is malformed") from error
+
+    return decode_carrier_stream(
+        carrier,
+        model,
+        length_resolver=resolve_v1_length,
+        final_validator=validate_v1,
+        finish_tokens=finish_tokens,
+        maximum_characters=maximum_characters,
+    )
+
+
+def decode_carrier_stream(
+    carrier: str,
+    model: TokenModel,
+    *,
+    length_resolver: Callable[[bytes], int | None],
+    final_validator: Callable[[bytes], None],
+    initial_token_ids: Sequence[int] = (),
+    finish_tokens: int = DEFAULT_FINISH_TOKENS,
+    maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
+) -> bytes:
+    """Recover an exact byte stream after skipping an observed visible primer."""
     _validate_finish_limit(finish_tokens)
     _validate_carrier_structure(carrier, maximum_characters=maximum_characters)
     observed = model.tokenize(carrier)
     if model.detokenize(observed) != carrier:
         raise CarrierTokenizationError("carrier tokenizer round trip changed visible text")
+    initial = list(initial_token_ids)
+    if observed[: len(initial)] != initial:
+        raise CarrierTokenizationError("carrier does not start with the expected primer tokens")
 
     collector = BitCollector()
     target_bits: int | None = None
@@ -180,17 +251,15 @@ def decode_carrier(
         nonlocal target_bits
         collector.append(bit)
         complete = collector.complete_bytes()
-        if target_bits is None and complete:
+        if target_bits is None:
             try:
-                payload_length, header_bytes = decode_uvarint(complete, 0, max_bytes=3)
-            except EOFError:
-                pass
-            except ValueError as error:
-                raise CarrierArithmeticError("carrier has an invalid frame length") from error
-            else:
-                if payload_length > maximum_payload_bytes:
-                    raise CarrierArithmeticError("carrier frame declaration exceeds protocol limit")
-                target_bits = (header_bytes + payload_length) * 8
+                target_bytes = length_resolver(complete)
+            except (OuterFrameError, ValueError) as error:
+                raise CarrierArithmeticError("carrier has an invalid stream declaration") from error
+            if target_bytes is not None:
+                if target_bytes <= 0:
+                    raise CarrierArithmeticError("carrier declared an invalid stream length")
+                target_bits = target_bytes * 8
         if target_bits is not None and collector.count > target_bits:
             suffix_offset = collector.count - target_bits - 1
             expected = 1 if suffix_offset % 2 == 0 else 0
@@ -198,11 +267,11 @@ def decode_carrier(
                 raise CarrierArithmeticError("carrier has invalid virtual suffix bits")
 
     encoder = ArithmeticBitEncoder(emit)
-    visible_prefix: list[int] = []
+    visible_prefix = initial.copy()
     data_end: int | None = None
     consecutive_bridges = 0
 
-    for index, token_id in enumerate(observed):
+    for index, token_id in enumerate(observed[len(initial) :], start=len(initial)):
         table = model.next_table(visible_prefix)
         counts = _validate_table(table)
         if max(counts) > MAX_CODING_SYMBOL_FREQUENCY:
@@ -246,9 +315,9 @@ def decode_carrier(
 
     if not carrier.endswith((".", "!", "?")):
         raise CarrierStructureError("carrier does not end as a sentence")
-    frame = collector.complete_bytes()[: target_bits // 8]
+    stream = collector.complete_bytes()[: target_bits // 8]
     try:
-        unpack_stego_frame(frame)
-    except OuterFrameError as error:
-        raise CarrierArithmeticError("recovered carrier frame is malformed") from error
-    return frame
+        final_validator(stream)
+    except (OuterFrameError, ValueError) as error:
+        raise CarrierArithmeticError("recovered carrier stream is malformed") from error
+    return stream

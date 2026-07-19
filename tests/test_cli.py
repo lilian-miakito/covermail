@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from covermail.address.canonical import canonical_json
@@ -132,3 +134,142 @@ def test_cli_model_prepare_materializes_regular_tree(tmp_path: Path, capsys: Any
     manifest = json.loads(capsys.readouterr().out)
     assert [entry["path"] for entry in manifest] == sorted(MODEL_ARTIFACT_PATHS)
     assert all((destination / path).is_file() for path in MODEL_ARTIFACT_PATHS)
+
+
+def test_cli_v2_context_bound_binary_round_trip(
+    tmp_path: Path,
+    address: dict[str, Any],
+    monkeypatch: Any,
+    capsys: Any,
+) -> None:
+    template_address = copy.deepcopy(address)
+    template_address["codec"]["id"] = "cm-arithmetic-v2"
+    template_address["codec"]["length_bias_milli"] = 0
+    template_address["codec"]["prompt_template"] = "cm-email-continue-primer-v2"
+    template = tmp_path / "template-v2.json"
+    public = tmp_path / "alice-v2.json"
+    secret = tmp_path / "secret-v2.txt"
+    stream = tmp_path / "message.cm2"
+    recovered = tmp_path / "recovered-v2.txt"
+    identities = tmp_path / "identities-v2"
+    subject = "Des nouvelles du jardin"
+    primer = "Je voulais te raconter calmement ce qui s'est passé."
+    template.write_bytes(canonical_json(template_address))
+    secret.write_text("Message CLI v2 — contexte lié", encoding="utf-8")
+    answers = iter(["passphrase", "passphrase", "passphrase"])
+    monkeypatch.setattr("covermail.cli.getpass.getpass", lambda prompt: next(answers))
+
+    assert main(
+        [
+            "identity-create",
+            str(template),
+            "--identities-dir",
+            str(identities),
+            "--public-address",
+            str(public),
+        ]
+    ) == 0
+    identity_dir = json.loads(capsys.readouterr().out)["identity_dir"]
+    assert main(
+        [
+            "encrypt-v2",
+            str(public),
+            "--subject",
+            subject,
+            "--primer",
+            primer,
+            "--message",
+            str(secret),
+            "--output",
+            str(stream),
+        ]
+    ) == 0
+    capsys.readouterr()
+    assert main(
+        [
+            "decrypt-v2",
+            identity_dir,
+            "--subject",
+            subject,
+            "--primer",
+            primer,
+            "--stream",
+            str(stream),
+            "--output",
+            str(recovered),
+        ]
+    ) == 0
+    assert recovered.read_text(encoding="utf-8") == secret.read_text(encoding="utf-8")
+
+
+def test_cli_v2_fake_adapter_carrier_round_trip_and_k_all(
+    tmp_path: Path,
+    address: dict[str, Any],
+    monkeypatch: Any,
+    capsys: Any,
+) -> None:
+    from covermail.codec.fake_model import FakeLanguageModel
+    from covermail.service_v2 import encrypt_message_v2
+
+    v2_address = copy.deepcopy(address)
+    v2_address["codec"]["id"] = "cm-arithmetic-v2"
+    v2_address["codec"]["length_bias_milli"] = 0
+    v2_address["codec"]["prompt_template"] = "cm-email-continue-primer-v2"
+    address_path = tmp_path / "address-v2.json"
+    stream_path = tmp_path / "message.cm2"
+    carrier_path = tmp_path / "carrier.txt"
+    recovered_path = tmp_path / "decoded.cm2"
+    primer_path = tmp_path / "primer.txt"
+    subject = "Sujet v2"
+    primer = "abc."
+    model = FakeLanguageModel()
+    primer_ids = tuple(model.tokenize(primer))
+    address_path.write_bytes(canonical_json(v2_address))
+    stream = encrypt_message_v2(v2_address, "carrier CLI v2", subject, primer)
+    stream_path.write_bytes(stream)
+    monkeypatch.setattr(
+        "covermail.cli.load_profile",
+        lambda address, model_root, visible_subject, visible_primer=None: SimpleNamespace(
+            model=model,
+            primer_ids=primer_ids,
+        ),
+    )
+
+    assert main(
+        [
+            "carrier-encode",
+            str(address_path),
+            "--model-root",
+            str(tmp_path),
+            "--subject",
+            subject,
+            "--primer",
+            primer,
+            "--frame",
+            str(stream_path),
+            "--output",
+            str(carrier_path),
+        ]
+    ) == 0
+    metrics = json.loads(capsys.readouterr().err)
+    assert metrics["k_all"] == metrics["characters"] / metrics["stream_bytes"]
+    assert metrics["metrics"]["primer_tokens"] == len(primer_ids)
+
+    assert main(
+        [
+            "carrier-decode",
+            str(address_path),
+            "--model-root",
+            str(tmp_path),
+            "--subject",
+            subject,
+            "--carrier",
+            str(carrier_path),
+            "--output",
+            str(recovered_path),
+            "--primer-output",
+            str(primer_path),
+        ]
+    ) == 0
+    assert recovered_path.read_bytes() == stream
+    assert primer_path.read_text(encoding="utf-8") == primer
