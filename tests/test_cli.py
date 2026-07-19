@@ -73,3 +73,21 @@ def test_cli_rejects_oversized_secret_before_protocol_work(
     except SystemExit as error:
         assert error.code == 2
     assert "exceeds protocol limit" in capsys.readouterr().err
+
+
+def test_cli_fake_carrier_round_trip(tmp_path: Path, capsys: Any) -> None:
+    frame = tmp_path / "message.cm"
+    carrier = tmp_path / "carrier.txt"
+    recovered = tmp_path / "recovered.cm"
+    from covermail.protocol.outer_frame import pack_stego_frame
+
+    frame.write_bytes(pack_stego_frame(b"CLI Stage 2"))
+    assert main(["fake-encode", "--frame", str(frame), "--output", str(carrier)]) == 0
+    encode_status = capsys.readouterr().err
+    assert '"tokens"' in encode_status
+    assert carrier.read_text(encoding="utf-8").endswith(".")
+
+    assert main(
+        ["fake-decode", "--carrier", str(carrier), "--output", str(recovered)]
+    ) == 0
+    assert recovered.read_bytes() == frame.read_bytes()

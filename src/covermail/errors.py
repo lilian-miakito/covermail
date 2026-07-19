@@ -35,3 +35,19 @@ class IdentityStorageError(CovermailError):
 
 class DecryptionError(CovermailError):
     """HPKE authentication failed for an intentionally unspecified reason."""
+
+
+class CarrierGenerationError(CovermailError):
+    """A carrier could not be generated within protocol limits."""
+
+
+class CarrierStructureError(CovermailError):
+    """A carrier violates the visible one-paragraph profile."""
+
+
+class CarrierTokenizationError(CovermailError):
+    """Carrier text does not reproduce its token sequence exactly."""
+
+
+class CarrierArithmeticError(CovermailError):
+    """The carrier arithmetic stream is malformed or incomplete."""

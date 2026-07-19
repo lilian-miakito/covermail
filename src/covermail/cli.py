@@ -1,4 +1,4 @@
-"""Offline Stage 1 CLI for binary Covermail payload exchange."""
+"""Offline Stage 1 protocol and Stage 2 fake-carrier CLI."""
 
 from __future__ import annotations
 
@@ -7,12 +7,15 @@ import getpass
 import json
 import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import NoReturn
 
 from covermail.address.canonical import canonical_json, read_address_file
 from covermail.address.fingerprint import human_fingerprint, machine_address_id
 from covermail.address.schema import Address, validate_address
+from covermail.codec.fake_model import FakeLanguageModel
+from covermail.codec.generative import decode_carrier, encode_carrier
 from covermail.crypto.identity import generate_identity
 from covermail.crypto.private_store import save_identity, unlock_identity
 from covermail.errors import CovermailError
@@ -119,10 +122,30 @@ def _decrypt(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fake_encode(args: argparse.Namespace) -> int:
+    model = FakeLanguageModel()
+    result = encode_carrier(_read_bytes(args.frame), model)
+    _write_bytes(args.output, result.text.encode("utf-8"))
+    if args.output != "-":
+        metadata = {"metrics": asdict(result.metrics), "tokens": len(result.token_ids)}
+        print(json.dumps(metadata, sort_keys=True), file=sys.stderr)
+    return 0
+
+
+def _fake_decode(args: argparse.Namespace) -> int:
+    raw = _read_limited(args.carrier, 800000)
+    carrier = raw.decode("utf-8", errors="strict")
+    frame = decode_carrier(carrier, FakeLanguageModel())
+    _write_bytes(args.output, frame)
+    if args.output != "-":
+        print(f"recovered {len(frame)} framed bytes", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="covermail",
-        description="Covermail v1 Stage 1 binary protocol tools (no generative carrier yet)",
+        description="Covermail v1 Stage 1 protocol and Stage 2 fake-carrier tools",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -153,6 +176,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", required=True, help="UTF-8 output file, or - for standard output"
     )
     decrypt.set_defaults(handler=_decrypt)
+
+    fake_encode = subparsers.add_parser(
+        "fake-encode", help="map a binary stego frame to a deterministic fake carrier"
+    )
+    fake_encode.add_argument("--frame", required=True, help="binary input file, or -")
+    fake_encode.add_argument("--output", required=True, help="UTF-8 carrier output file, or -")
+    fake_encode.set_defaults(handler=_fake_encode)
+
+    fake_decode = subparsers.add_parser(
+        "fake-decode", help="recover a binary stego frame from a fake carrier"
+    )
+    fake_decode.add_argument("--carrier", required=True, help="UTF-8 input file, or -")
+    fake_decode.add_argument("--output", required=True, help="binary output file, or -")
+    fake_decode.set_defaults(handler=_fake_decode)
     return parser
 
 
