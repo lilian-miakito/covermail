@@ -10,7 +10,7 @@ class AddressParseError(CovermailError):
 
 
 class AddressValidationError(CovermailError):
-    """The public address does not satisfy the v1 schema."""
+    """The public address does not satisfy the schema."""
 
 
 class InnerFrameError(CovermailError):
@@ -42,7 +42,7 @@ class CarrierGenerationError(CovermailError):
 
 
 class CarrierStructureError(CovermailError):
-    """A carrier violates the visible one-paragraph profile."""
+    """A carrier violates the visible transport profile."""
 
 
 class CarrierTokenizationError(CovermailError):

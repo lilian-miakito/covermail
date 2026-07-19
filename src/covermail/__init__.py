@@ -1,3 +1,3 @@
-"""Covermail v1 protocol implementation (Stages 0 and 1)."""
+"""Covermail protocol implementation."""
 
 __version__ = "0.1.0"

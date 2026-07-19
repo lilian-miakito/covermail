@@ -17,6 +17,7 @@ from covermail.errors import CarrierGenerationError, CarrierTokenizationError
 _VISIBLE_CHARACTERS = tuple(
     dict.fromkeys(
         string.ascii_letters
+        + " \n"
         + "àâäçéèêëîïôöùûüÿœæ"
         + "αβγδεζηθικλμνξοπρστυφχψω"
         + "абвгдежзийклмнопрстуфхцчшщыэюя"
@@ -68,9 +69,7 @@ class FakeLanguageModel:
         self._special_token_ids = frozenset(special_token_ids)
         self._period_token = self._single_ids["."]
         self._ordinary_ids = tuple(
-            token_id
-            for token_id, text in self._texts.items()
-            if text not in {".", "!", "?"}
+            token_id for token_id, text in self._texts.items() if text not in {".", "!", "?"}
         )
 
     def tokenize(self, text: str) -> list[int]:

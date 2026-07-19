@@ -21,12 +21,12 @@ from covermail.errors import AddressValidationError
 def test_valid_address_and_fixed_fingerprint(address: dict[str, Any]) -> None:
     validated = validate_address(address)
     assert address_digest(validated).hex() == (
-        "5d366003b013b1b4758f5203a31ae56fb5ede33faea847707247f3af0c5797df"
+        "3fb5c2670e2dae673cec33d7b0b0e2471d9e8390e8f40e905216523b48f06360"
     )
-    assert address_id(validated).hex() == "5d366003b013b1b4758f5203a31ae56f"
-    assert machine_address_id(validated) == "XTZgA7ATsbR1j1IDoxrlbw"
+    assert address_id(validated).hex() == "3fb5c2670e2dae673cec33d7b0b0e247"
+    assert machine_address_id(validated) == "P7XCZw4trmc87DPXsLDiRw"
     assert human_fingerprint(validated) == (
-        "LU3G AA5Q COY3 I5MP KIB2 GGXF N626 3YZ7 V2UE O4DS I7Z2 6DCX S7PQ"
+        "H624 EZYO FWXG OPHM GPL3 BMHC I4OZ 5A4Q 5D2A 5ECS CZJD WSHQ MNQA"
     )
 
 
@@ -47,7 +47,7 @@ def test_valid_address_and_fixed_fingerprint(address: dict[str, Any]) -> None:
         (("codec", "frequency_total"), 65536),
         (("codec", "self_test", "path_indices"), [0, 1, 2, 0]),
         (("cover", "language"), "not a tag"),
-        (("cover", "max_questions"), 5),
+        (("cover", "max_visible_characters"), 5),
     ],
 )
 def test_schema_mutations_fail(

@@ -1,4 +1,4 @@
-"""Uniformized, context-bound bitstream framing for cm-arithmetic-v2."""
+"""Uniformized, context-bound byte stream hidden in a carrier."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from covermail.protocol.outer_frame import (
 )
 from covermail.protocol.varint import decode_uvarint, encode_uvarint
 
-MASK_INFO_LABEL = b"covermail/stego-mask/v2\x00"
-MAX_V2_STREAM_BYTES = HPKE_ENCAPSULATED_KEY_BYTES + 3 + MAX_STEGO_PAYLOAD_BYTES
+MASK_INFO_LABEL = b"covermail/stego-mask\x00"
+MAX_STREAM_BYTES = HPKE_ENCAPSULATED_KEY_BYTES + 3 + MAX_STEGO_PAYLOAD_BYTES
 
 
 def _xor(left: bytes, right: bytes) -> bytes:
@@ -34,9 +34,9 @@ def _mask(
     length: int,
 ) -> bytes:
     if len(encapsulated_key) != HPKE_ENCAPSULATED_KEY_BYTES:
-        raise OuterFrameError("v2 stream has an invalid HPKE encapsulated key")
+        raise OuterFrameError("stream has an invalid HPKE encapsulated key")
     if length < 0 or length > MAX_STEGO_PAYLOAD_BYTES + 3:
-        raise OuterFrameError("v2 mask length exceeds protocol limit")
+        raise OuterFrameError("stream mask length exceeds protocol limit")
     return HKDF(
         algorithm=hashes.SHA256(),
         length=length,
@@ -45,10 +45,10 @@ def _mask(
     ).derive(encapsulated_key)
 
 
-def pack_v2_stream(address: Address, hpke_blob: bytes, subject: str, primer: str) -> bytes:
-    """Put random HPKE enc first and mask every structured byte that follows."""
+def pack_stream(address: Address, hpke_blob: bytes, subject: str, primer: str) -> bytes:
+    """Keep HPKE enc first and mask every structured byte that follows."""
     if len(hpke_blob) < HPKE_ENCAPSULATED_KEY_BYTES + 16:
-        raise OuterFrameError("HPKE blob is too short for v2 framing")
+        raise OuterFrameError("HPKE blob is too short")
     encapsulated_key = hpke_blob[:HPKE_ENCAPSULATED_KEY_BYTES]
     ciphertext = hpke_blob[HPKE_ENCAPSULATED_KEY_BYTES:]
     payload = build_outer_payload(address, ciphertext)
@@ -59,8 +59,8 @@ def pack_v2_stream(address: Address, hpke_blob: bytes, subject: str, primer: str
     )
 
 
-class V2StreamLengthResolver:
-    """Discover a masked v2 stream length after its fixed random prefix arrives."""
+class StreamLengthResolver:
+    """Discover a masked stream length after its fixed prefix arrives."""
 
     def __init__(self, address: Address, subject: str, primer: str) -> None:
         self.address = address
@@ -87,21 +87,21 @@ class V2StreamLengthResolver:
         except EOFError:
             return None
         except ValueError as error:
-            raise OuterFrameError("v2 stream has an invalid masked length") from error
+            raise OuterFrameError("stream has an invalid masked length") from error
         if payload_length > MAX_STEGO_PAYLOAD_BYTES:
-            raise OuterFrameError("v2 stream declaration exceeds protocol limit")
+            raise OuterFrameError("stream declaration exceeds protocol limit")
         self.target_bytes = HPKE_ENCAPSULATED_KEY_BYTES + header_bytes + payload_length
         return self.target_bytes
 
 
-def unpack_v2_stream(address: Address, stream: bytes, subject: str, primer: str) -> bytes:
-    """Recover the ordinary HPKE blob after exact v2 stream validation."""
-    if len(stream) > MAX_V2_STREAM_BYTES or len(stream) <= HPKE_ENCAPSULATED_KEY_BYTES:
-        raise OuterFrameError("v2 stream length is outside protocol bounds")
-    resolver = V2StreamLengthResolver(address, subject, primer)
+def unpack_stream(address: Address, stream: bytes, subject: str, primer: str) -> bytes:
+    """Recover the HPKE blob after exact stream validation."""
+    if len(stream) > MAX_STREAM_BYTES or len(stream) <= HPKE_ENCAPSULATED_KEY_BYTES:
+        raise OuterFrameError("stream length is outside protocol bounds")
+    resolver = StreamLengthResolver(address, subject, primer)
     target = resolver.resolve(stream[: HPKE_ENCAPSULATED_KEY_BYTES + 3])
     if target is None or target != len(stream):
-        raise OuterFrameError("v2 stream length does not match its declaration")
+        raise OuterFrameError("stream length does not match its declaration")
     encapsulated_key = stream[:HPKE_ENCAPSULATED_KEY_BYTES]
     masked_tail = stream[HPKE_ENCAPSULATED_KEY_BYTES:]
     clear_tail = _xor(
@@ -111,9 +111,9 @@ def unpack_v2_stream(address: Address, stream: bytes, subject: str, primer: str)
     try:
         payload_length, header_bytes = decode_uvarint(clear_tail, 0, max_bytes=3)
     except (EOFError, ValueError) as error:
-        raise OuterFrameError("v2 stream has an invalid clear length") from error
+        raise OuterFrameError("stream has an invalid clear length") from error
     payload = clear_tail[header_bytes:]
     if len(payload) != payload_length:
-        raise OuterFrameError("v2 stream payload length mismatch")
+        raise OuterFrameError("stream payload length mismatch")
     ciphertext = parse_outer_payload(address, payload)
     return encapsulated_key + ciphertext

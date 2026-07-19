@@ -10,7 +10,7 @@ from typing import Any, cast
 from covermail.address.schema import Address, validate_address
 from covermail.codec.candidates import CandidateConfig, PromptedLanguageModel
 from covermail.codec.self_test import (
-    SELF_TEST_PRIMER_V2,
+    SELF_TEST_PRIMER,
     SELF_TEST_SUBJECT,
     SelfTestResult,
     verify_self_test,
@@ -74,20 +74,10 @@ def load_profile(
         top_n=cast(int, codec["top_n"]),
         candidate_pool_multiplier=cast(int, codec["candidate_pool_multiplier"]),
         temperature_milli=cast(int, codec["temperature_milli"]),
-        length_bias_milli=cast(int, codec["length_bias_milli"]),
     )
 
-    codec_id = codec["id"]
-    if codec_id == "cm-arithmetic-v2":
-        test_prompt = adapter.render_prompt_v2(
-            cover,
-            SELF_TEST_SUBJECT,
-            SELF_TEST_PRIMER_V2,
-        )
-        test_primer_ids = adapter.tokenize(SELF_TEST_PRIMER_V2)
-    else:
-        test_prompt = adapter.render_prompt(cover, SELF_TEST_SUBJECT)
-        test_primer_ids = []
+    test_prompt = adapter.render_prompt(cover, SELF_TEST_SUBJECT, SELF_TEST_PRIMER)
+    test_primer_ids = adapter.tokenize(SELF_TEST_PRIMER)
     test_model = PromptedLanguageModel(adapter, adapter.tokenize(test_prompt), config)
     self_test_fields = _mapping(codec["self_test"], "codec.self_test")
     path_indices = self_test_fields["path_indices"]
@@ -103,16 +93,12 @@ def load_profile(
         initial_prefix=test_primer_ids,
     )
 
-    if codec_id == "cm-arithmetic-v2":
-        if primer is None:
-            raise ModelProfileError("cm-arithmetic-v2 requires a visible primer")
-        exact_primer = validate_primer(primer)
-        rendered_prompt = adapter.render_prompt_v2(cover, subject, exact_primer)
-        primer_ids = adapter.tokenize(exact_primer)
-        if adapter.detokenize(primer_ids) != exact_primer:
-            raise ModelProfileError("visible primer does not round-trip through the tokenizer")
-    else:
-        rendered_prompt = adapter.render_prompt(cover, subject)
-        primer_ids = []
+    if primer is None:
+        raise ModelProfileError("the Covermail profile requires a visible primer")
+    exact_primer = validate_primer(primer)
+    rendered_prompt = adapter.render_prompt(cover, subject, exact_primer)
+    primer_ids = adapter.tokenize(exact_primer)
+    if adapter.detokenize(primer_ids) != exact_primer:
+        raise ModelProfileError("visible primer does not round-trip through the tokenizer")
     prompted = PromptedLanguageModel(adapter, adapter.tokenize(rendered_prompt), config)
     return LoadedProfile(prompted, rendered_prompt, tuple(primer_ids), result)

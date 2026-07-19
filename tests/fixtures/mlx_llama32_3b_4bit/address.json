@@ -3,24 +3,21 @@
     "candidate_pool_multiplier": 8,
     "finish_tokens": 32,
     "frequency_total": 32768,
-    "id": "cm-arithmetic-v1",
-    "length_bias_milli": 100,
+    "id": "cm-arithmetic",
     "logit_scale": 1024,
-    "prompt_template": "cm-email-one-paragraph-v1",
+    "prompt_template": "cm-email-continuation",
     "self_test": {
-      "expected_sha256": "f7784d09641581a672d5691293236b9589c4011e4e2c59ecc9dc65fc7333bcad",
+      "expected_sha256": "696baa21246bef6026ae86fce59e7f8b4116a74f525db56b8e137e98b6e9bf13",
       "path_indices": [0, 1, 63, 0],
       "steps": 4
     },
     "temperature_milli": 1000,
     "top_n": 64,
-    "visible_filter": "cm-visible-email-v1"
+    "visible_filter": "cm-visible-email"
   },
   "cover": {
     "language": "fr-FR",
-    "max_questions": 1,
-    "max_sentences": 4,
-    "max_visible_characters": 4000,
+    "max_visible_characters": 20000,
     "persona_recipient": "un ami de longue date",
     "persona_sender": "une personne ordinaire écrivant un bref email",
     "relationship": "deux amis proches",
@@ -81,7 +78,7 @@
         "tokenizers": "0.22.2",
         "transformers": "5.14.1"
       },
-      "profile": "darwin-arm64-mlx-v1",
+      "profile": "darwin-arm64-mlx",
       "python_version": "3.12.5",
       "trust_remote_code": false
     }

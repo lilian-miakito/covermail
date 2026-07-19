@@ -1,4 +1,4 @@
-"""Primer-aware carrier orchestration for cm-arithmetic-v2."""
+"""Primer-aware carrier orchestration for Covermail."""
 
 from __future__ import annotations
 
@@ -11,10 +11,11 @@ from covermail.codec.generative import (
     decode_carrier_stream,
     encode_carrier_stream,
 )
-from covermail.protocol.v2_frame import V2StreamLengthResolver, unpack_v2_stream
+from covermail.cover.transport import canonical_carrier
+from covermail.protocol.stego_stream import StreamLengthResolver, unpack_stream
 
 
-def encode_v2_carrier(
+def encode_carrier(
     stream: bytes,
     model: TokenModel,
     address: Address,
@@ -25,7 +26,7 @@ def encode_v2_carrier(
     finish_tokens: int = DEFAULT_FINISH_TOKENS,
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
 ) -> CarrierResult:
-    unpack_v2_stream(address, stream, subject, primer)
+    unpack_stream(address, stream, subject, primer)
     return encode_carrier_stream(
         stream,
         model,
@@ -35,7 +36,7 @@ def encode_v2_carrier(
     )
 
 
-def decode_v2_carrier(
+def decode_carrier(
     carrier: str,
     model: TokenModel,
     address: Address,
@@ -46,13 +47,13 @@ def decode_v2_carrier(
     finish_tokens: int = DEFAULT_FINISH_TOKENS,
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
 ) -> bytes:
-    resolver = V2StreamLengthResolver(address, subject, primer)
+    resolver = StreamLengthResolver(address, subject, primer)
 
     def validate(stream: bytes) -> None:
-        unpack_v2_stream(address, stream, subject, primer)
+        unpack_stream(address, stream, subject, primer)
 
     return decode_carrier_stream(
-        carrier,
+        canonical_carrier(carrier),
         model,
         length_resolver=resolver.resolve,
         final_validator=validate,

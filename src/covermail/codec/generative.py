@@ -1,4 +1,4 @@
-"""Byte-stream-to-token orchestration for Covermail arithmetic codecs."""
+"""Byte-stream-to-token orchestration for the Covermail arithmetic codec."""
 
 from __future__ import annotations
 
@@ -8,10 +8,7 @@ from dataclasses import dataclass
 from covermail.codec.arithmetic import ArithmeticBitEncoder, ArithmeticSymbolDecoder
 from covermail.codec.bits import BitCollector, FramedBitSource
 from covermail.codec.candidates import CandidateTable, TokenModel
-from covermail.codec.frequencies import (
-    MAX_CODING_SYMBOL_FREQUENCY,
-    table_counts,
-)
+from covermail.codec.frequencies import table_counts
 from covermail.errors import (
     CarrierArithmeticError,
     CarrierGenerationError,
@@ -19,10 +16,7 @@ from covermail.errors import (
     CarrierTokenizationError,
     OuterFrameError,
 )
-from covermail.protocol.outer_frame import MAX_STEGO_PAYLOAD_BYTES, unpack_stego_frame
-from covermail.protocol.varint import decode_uvarint
 
-MAX_CONSECUTIVE_BRIDGE_TOKENS = 32
 MAX_FINISH_TOKENS = 128
 DEFAULT_FINISH_TOKENS = 32
 MAX_FAKE_CARRIER_CHARACTERS = 200000
@@ -32,7 +26,6 @@ MAX_FAKE_CARRIER_CHARACTERS = 200000
 class CarrierMetrics:
     primer_tokens: int
     data_tokens: int
-    bridge_tokens: int
     finish_tokens: int
     confirmed_bits: int
     source_bits_read: int
@@ -47,7 +40,7 @@ class CarrierResult:
 
 def _validate_finish_limit(finish_tokens: int) -> None:
     if not 0 <= finish_tokens <= MAX_FINISH_TOKENS:
-        raise ValueError("finish_tokens outside v1 range")
+        raise ValueError("finish_tokens outside protocol range")
 
 
 def _validate_table(table: CandidateTable) -> list[int]:
@@ -62,8 +55,8 @@ def _validate_carrier_structure(text: str, *, maximum_characters: int) -> None:
         raise CarrierStructureError("carrier is empty")
     if len(text) > maximum_characters:
         raise CarrierStructureError("carrier exceeds character limit")
-    if any(character in text for character in ("\r", "\n", "\t", "\x00")):
-        raise CarrierStructureError("carrier contains a forbidden control")
+    if "\r" in text or "\x00" in text:
+        raise CarrierStructureError("carrier contains a non-canonical control")
     if text[0].isspace() or text[-1].isspace():
         raise CarrierStructureError("carrier has leading or trailing whitespace")
 
@@ -71,28 +64,6 @@ def _validate_carrier_structure(text: str, *, maximum_characters: int) -> None:
 def _validate_round_trip(model: TokenModel, token_ids: Sequence[int], text: str) -> None:
     if model.tokenize(text) != list(token_ids):
         raise CarrierTokenizationError("carrier does not retokenize exactly")
-
-
-def encode_carrier(
-    stego_frame: bytes,
-    model: TokenModel,
-    *,
-    finish_tokens: int = DEFAULT_FINISH_TOKENS,
-    maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
-) -> CarrierResult:
-    """Map one complete stego frame to deterministic fake-model token choices."""
-    _validate_finish_limit(finish_tokens)
-    try:
-        unpack_stego_frame(stego_frame)
-    except OuterFrameError as error:
-        raise CarrierGenerationError("input is not one complete stego frame") from error
-
-    return encode_carrier_stream(
-        stego_frame,
-        model,
-        finish_tokens=finish_tokens,
-        maximum_characters=maximum_characters,
-    )
 
 
 def encode_carrier_stream(
@@ -134,27 +105,17 @@ def encode_carrier_stream(
     token_ids = initial.copy()
     primer_tokens = len(initial)
     data_tokens = 0
-    bridge_tokens = 0
-    consecutive_bridges = 0
     token_guard = max(1024, len(stream) * 64 + 1024)
 
     while confirmed < source.real_bits:
         table = model.next_table(token_ids)
-        counts = _validate_table(table)
-        if max(counts) > MAX_CODING_SYMBOL_FREQUENCY:
-            consecutive_bridges += 1
-            bridge_tokens += 1
-            if consecutive_bridges > MAX_CONSECUTIVE_BRIDGE_TOKENS:
-                raise CarrierGenerationError("model context remained too low-entropy")
-            token_ids.append(table.candidates[0].token_id)
-        else:
-            consecutive_bridges = 0
-            symbol = decoder.symbol(table.cumulative)
-            mirror.symbol(symbol, table.cumulative)
-            if desynchronized:
-                raise CarrierArithmeticError("arithmetic mirror desynchronized")
-            token_ids.append(table.candidates[symbol].token_id)
-            data_tokens += 1
+        _validate_table(table)
+        symbol = decoder.symbol(table.cumulative)
+        mirror.symbol(symbol, table.cumulative)
+        if desynchronized:
+            raise CarrierArithmeticError("arithmetic mirror desynchronized")
+        token_ids.append(table.candidates[symbol].token_id)
+        data_tokens += 1
         if len(token_ids) - primer_tokens > token_guard:
             raise CarrierGenerationError("arithmetic coder failed to make progress")
 
@@ -177,50 +138,10 @@ def encode_carrier_stream(
         metrics=CarrierMetrics(
             primer_tokens=primer_tokens,
             data_tokens=data_tokens,
-            bridge_tokens=bridge_tokens,
             finish_tokens=added_finish,
             confirmed_bits=confirmed,
             source_bits_read=read_offset,
         ),
-    )
-
-
-def decode_carrier(
-    carrier: str,
-    model: TokenModel,
-    *,
-    finish_tokens: int = DEFAULT_FINISH_TOKENS,
-    maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
-    maximum_payload_bytes: int = MAX_STEGO_PAYLOAD_BYTES,
-) -> bytes:
-    """Recover one exact v1 stego frame and validate suffix and finish tokens."""
-
-    def resolve_v1_length(complete: bytes) -> int | None:
-        if complete:
-            try:
-                payload_length, header_bytes = decode_uvarint(complete, 0, max_bytes=3)
-            except EOFError:
-                return None
-            except ValueError as error:
-                raise CarrierArithmeticError("carrier has an invalid frame length") from error
-            if payload_length > maximum_payload_bytes:
-                raise CarrierArithmeticError("carrier frame declaration exceeds protocol limit")
-            return header_bytes + payload_length
-        return None
-
-    def validate_v1(frame: bytes) -> None:
-        try:
-            unpack_stego_frame(frame)
-        except OuterFrameError as error:
-            raise CarrierArithmeticError("recovered carrier frame is malformed") from error
-
-    return decode_carrier_stream(
-        carrier,
-        model,
-        length_resolver=resolve_v1_length,
-        final_validator=validate_v1,
-        finish_tokens=finish_tokens,
-        maximum_characters=maximum_characters,
     )
 
 
@@ -269,21 +190,9 @@ def decode_carrier_stream(
     encoder = ArithmeticBitEncoder(emit)
     visible_prefix = initial.copy()
     data_end: int | None = None
-    consecutive_bridges = 0
-
     for index, token_id in enumerate(observed[len(initial) :], start=len(initial)):
         table = model.next_table(visible_prefix)
-        counts = _validate_table(table)
-        if max(counts) > MAX_CODING_SYMBOL_FREQUENCY:
-            consecutive_bridges += 1
-            if consecutive_bridges > MAX_CONSECUTIVE_BRIDGE_TOKENS:
-                raise CarrierArithmeticError("carrier exceeded the bridge-token limit")
-            if token_id != table.candidates[0].token_id:
-                raise CarrierArithmeticError("carrier has an invalid bridge token")
-            visible_prefix.append(token_id)
-            continue
-
-        consecutive_bridges = 0
+        _validate_table(table)
         candidate_index = next(
             (
                 candidate_index

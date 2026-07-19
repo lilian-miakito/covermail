@@ -19,6 +19,9 @@ from covermail.crypto.hpke import (
 )
 from covermail.errors import DecryptionError
 
+SUBJECT = "Des nouvelles"
+PRIMER = "Je voulais justement te donner quelques nouvelles."
+
 
 def test_rfc_9180_appendix_a1_base_vector_with_single_shot_empty_aad() -> None:
     """Use RFC 9180 A.1 values, adapting only AAD to the single-shot API's empty AAD."""
@@ -31,8 +34,7 @@ def test_rfc_9180_appendix_a1_base_vector_with_single_shot_empty_aad() -> None:
     # A.1's sequence-0 plaintext encrypted under its published key/base_nonce
     # with empty AAD, because Suite.decrypt() intentionally exposes no AAD parameter.
     ciphertext = bytes.fromhex(
-        "f938558b5d72f1a23810b4be2ab4f84331acc02fc97babc53a52ae821807a370"
-        "ad4546513b00cf03048f6b793c"
+        "f938558b5d72f1a23810b4be2ab4f84331acc02fc97babc53a52ae821807a370ad4546513b00cf03048f6b793c"
     )
     info = bytes.fromhex("4f6465206f6e2061204772656369616e2055726e")
     plaintext = bytes.fromhex("4265617574792069732074727574682c20747275746820626561757479")
@@ -44,25 +46,25 @@ def test_fixed_suite_overhead_and_round_trip(
 ) -> None:
     validated = validate_address(address)
     plaintext = b"authenticated inner frame"
-    blob = encrypt_inner(validated, plaintext)
+    blob = encrypt_inner(validated, plaintext, SUBJECT, PRIMER)
     assert KEM.X25519.enc_length() == HPKE_ENCAPSULATED_KEY_BYTES == 32
     assert len(blob) == len(plaintext) + HPKE_ENCAPSULATED_KEY_BYTES + HPKE_TAG_BYTES
-    assert decrypt_inner(validated, private_key, blob) == plaintext
+    assert decrypt_inner(validated, private_key, blob, SUBJECT, PRIMER) == plaintext
 
 
 def test_fresh_ephemeral_key_each_time(address: dict[str, Any]) -> None:
     validated = validate_address(address)
-    first = encrypt_inner(validated, b"same")
-    second = encrypt_inner(validated, b"same")
+    first = encrypt_inner(validated, b"same", SUBJECT, PRIMER)
+    second = encrypt_inner(validated, b"same", SUBJECT, PRIMER)
     assert first != second
     assert first[:32] != second[:32]
 
 
 def test_info_is_address_bound(address: dict[str, Any]) -> None:
     validated = validate_address(address)
-    info = hpke_info(validated)
+    info = hpke_info(validated, SUBJECT, PRIMER)
     assert info.startswith(HPKE_INFO_LABEL)
-    assert len(info) == len(HPKE_INFO_LABEL) + 32 + 17
+    assert len(info) == len(HPKE_INFO_LABEL) + 32 + 17 + 32
 
 
 @pytest.mark.parametrize("failure", ["wrong-key", "tamper", "wrong-info"])
@@ -72,7 +74,7 @@ def test_authentication_failures_are_generic(
     failure: str,
 ) -> None:
     validated = validate_address(address)
-    blob = encrypt_inner(validated, b"secret")
+    blob = encrypt_inner(validated, b"secret", SUBJECT, PRIMER)
     decrypt_address = validated
     decrypt_key = private_key
     if failure == "wrong-key":
@@ -84,4 +86,4 @@ def test_authentication_failures_are_generic(
         changed["recipient"]["label"] = "Mallory"
         decrypt_address = validate_address(changed)
     with pytest.raises(DecryptionError, match="not an authentic"):
-        decrypt_inner(decrypt_address, decrypt_key, blob)
+        decrypt_inner(decrypt_address, decrypt_key, blob, SUBJECT, PRIMER)

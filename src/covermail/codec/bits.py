@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 class FramedBitSource:
-    """Real bytes followed by the v1 infinite alternating 1,0 suffix."""
+    """Real bytes followed by the protocol's infinite alternating 1,0 suffix."""
 
     def __init__(self, data: bytes) -> None:
         self.data = data

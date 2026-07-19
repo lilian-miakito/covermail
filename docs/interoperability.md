@@ -1,40 +1,23 @@
 # Interoperability status
 
-Stages 0 through 2 are implemented for Python 3.12 with `cryptography==49.0.0`.
-Binary exchange uses the exact inner, HPKE, outer payload, and stego framing from
-the protocol. The HPKE suite is checked against RFC 9180 Appendix A.1 inputs;
-because the selected single-shot API has no AAD parameter, the fixture uses the
-published sequence-0 key and nonce with empty AAD. The deterministic fake model
-round-trips arbitrary practical payloads through the v1 32-bit arithmetic coder
-and has a stored carrier fixture. The example JSON remains a structural template
-rather than a publishable generative address.
+The pure protocol and fake-model layers round-trip arbitrary practical payloads
+through the 32-bit inverse arithmetic coder without special low-entropy states.
+The complete automated suite also covers HPKE, context binding, masking,
+termination, tokenizer round trips, LF carrier text, and CLI orchestration.
 
-Stage 3 now has one current **local-candidate**, not supported, codec:
-`cm-arithmetic-v2` on `darwin-arm64-mlx-v1`, using the exact cached
-`mlx-community/Llama-3.2-3B-Instruct-4bit` revision recorded in
-`docs/model-profiles.md`. Artifact verification, pure prompt rendering, full
-candidate construction, copy-safe/visible filters, the four-state self-test,
-MLX direct logits, a real encrypted frame/carrier fixture, and CLI encode/decode
-paths are implemented.
+The single MLX profile passes its deterministic model self-test on the local
+qualified host. Its exact artifacts and runtime are pinned in the public
+address fixture.
 
-The v2 M3 Pro round trip recovered and decrypted the stream exactly. It uses a
-Bob-chosen visible first sentence, binds that primer and the subject through
-HPKE, and uniformizes framing before arithmetic coding. A 114-byte stream used
-359 total carrier tokens and 1318 visible characters. Empirical `K_all` is
-11.5614 Unicode characters per stream byte, including primer, bridges, data,
-and closure. Reference times were 114.3 seconds to encode and 114.7 seconds to
-decode. This is transport and steering evidence, not a cross-installation or
-cover-quality claim.
+There is currently no committed real-model carrier fixture for the active
+codec. Historical carriers used a different codec and protocol labels, so
+retaining them would falsely imply compatibility.
 
-The next Stage 3 qualification work is:
+Before claiming interoperability:
 
-1. profile and optimize candidate construction without changing its exact
-   output, especially full-vocabulary quantization and copy-safe checks;
-2. collect `K_all` and quality measurements over representative message sizes;
-3. qualify the selected larger/faster production model if this 3B profile is
-   insufficiently fluent;
-4. exchange independently generated v2 carriers across two clean compatible
-   installations.
-
-No real-model interoperability or cover-quality claim is made until all four
-items pass.
+1. optimize candidate construction without changing the exact final tables;
+2. complete a real-model encode/decode round trip with the active codec;
+3. record `K_all`, tokens, entropy/progress, runtime, and carrier quality;
+4. exchange independently generated carriers between two clean compatible
+   installations;
+5. compare decoded bytes and plaintext bit-for-bit.

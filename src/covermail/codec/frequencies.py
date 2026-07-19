@@ -1,4 +1,4 @@
-"""Deterministic v1 integer frequency construction."""
+"""Deterministic integer frequency construction."""
 
 from __future__ import annotations
 
@@ -7,14 +7,13 @@ from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 LOGIT_SCALE = 1024
 WEIGHT_SCALE = 1 << 24
 FREQUENCY_TOTAL = 32768
-MAX_CODING_SYMBOL_FREQUENCY = 24576
 
 
 def deterministic_weights(scores: list[int], temperature_milli: int) -> list[int]:
     if not scores:
         raise ValueError("scores must not be empty")
     if not 100 <= temperature_milli <= 2000:
-        raise ValueError("temperature outside v1 range")
+        raise ValueError("temperature outside protocol range")
     maximum = max(scores)
     weights: list[int] = []
     with localcontext() as context:

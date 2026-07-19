@@ -9,9 +9,7 @@ from covermail.codec.candidates import (
     CandidateConfig,
     adjusted_score,
     build_candidate_table,
-    div_round_half_even,
     is_visible_token,
-    normalized_visible_word,
     quantize_logit,
 )
 
@@ -32,15 +30,7 @@ class CharacterLogitModel:
         return [9.0, 8.0, 7.0, 6.0, 5.0, 20.0, 19.0, 18.0, 4.0]
 
     def special_token_ids(self) -> set[int]:
-        return set()
-
-
-@pytest.mark.parametrize(
-    ("numerator", "denominator", "expected"),
-    [(1, 2, 0), (3, 2, 2), (5, 2, 2), (7, 2, 4)],
-)
-def test_div_round_half_even(numerator: int, denominator: int, expected: int) -> None:
-    assert div_round_half_even(numerator, denominator) == expected
+        return {5, 6, 7, 8}
 
 
 def test_quantize_logit_casts_to_float32_and_ties_even() -> None:
@@ -51,25 +41,23 @@ def test_quantize_logit_casts_to_float32_and_ties_even() -> None:
         quantize_logit(math.inf)
 
 
-def test_adjusted_score_uses_unicode_code_points() -> None:
-    assert adjusted_score(1.0, "éa", 100) == 819
-
-
-@pytest.mark.parametrize("word", ["prömpt", " prompt! "])
-def test_normalized_visible_word(word: str) -> None:
-    assert normalized_visible_word(word) == "prompt"
+def test_adjusted_score_is_the_quantized_logit() -> None:
+    assert adjusted_score(1.0) == quantize_logit(1.0)
 
 
 @pytest.mark.parametrize(
     "text",
-    ["", " ", "prompt", "Métadonnée", "<|x|>", "[hello]", "hello\n"],
+    ["", "bad\rline", "bad\x00text", "\ud800"],
 )
-def test_visible_filter_rejects_protocol_exclusions(text: str) -> None:
+def test_visible_filter_rejects_transport_breaking_text(text: str) -> None:
     assert not is_visible_token(text)
 
 
-@pytest.mark.parametrize("text", ["bonjour", " ça", "!", "d'accord", "mot mot"])
-def test_visible_filter_accepts_ordinary_text(text: str) -> None:
+@pytest.mark.parametrize(
+    "text",
+    ["bonjour", " ", "prompt", "<|x|>", "[hello]", "hello\n", "\n\n", "\t"],
+)
+def test_visible_filter_accepts_stable_email_text(text: str) -> None:
     assert is_visible_token(text)
 
 
@@ -79,7 +67,7 @@ def test_candidate_pool_filters_then_orders_and_builds_frequencies() -> None:
         model,
         context_ids=[99],
         visible_prefix=[],
-        config=CandidateConfig(4, 2, 1000, 0),
+        config=CandidateConfig(4, 2, 1000),
     )
     assert [candidate.token_id for candidate in table.candidates] == [0, 1, 2, 3]
     assert table.cumulative[0] == 0

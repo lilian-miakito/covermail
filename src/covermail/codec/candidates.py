@@ -1,10 +1,9 @@
-"""Deterministic v1 candidate construction and tokenizer-stability helpers."""
+"""Deterministic candidate construction and tokenizer-stability helpers."""
 
 from __future__ import annotations
 
 import math
 import struct
-import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
@@ -20,49 +19,6 @@ from covermail.codec.frequencies import (
 from covermail.errors import CarrierGenerationError
 
 MAX_MODEL_CANDIDATES = 4096
-MARKUP_HEAVY_CHARACTERS = frozenset("{}`[]<>\\^~")
-ORDINARY_PUNCTUATION = frozenset(".,!?;:'\"-()")
-META_WORDS_V1 = frozenset(
-    {
-        "analysis",
-        "assistant",
-        "example",
-        "format",
-        "input",
-        "instruction",
-        "instructions",
-        "message",
-        "messages",
-        "metadata",
-        "model",
-        "note",
-        "output",
-        "prompt",
-        "prompts",
-        "recipient",
-        "recipients",
-        "response",
-        "role",
-        "sender",
-        "system",
-        "timestamp",
-        "token",
-        "tokens",
-        "transcript",
-        "user",
-        "analyse",
-        "exemple",
-        "metadonnee",
-        "metadonnees",
-        "modele",
-        "reponse",
-        "systeme",
-        "jeton",
-        "jetons",
-        "transcription",
-        "utilisateur",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +51,6 @@ class TokenizerModel(Protocol):
 
 
 class TokenModel(TokenizerModel, Protocol):
-
     def next_table(self, visible_prefix: Sequence[int]) -> CandidateTable: ...
 
 
@@ -120,16 +75,6 @@ def _float32(value: float) -> float:
     return cast(float, result)
 
 
-def div_round_half_even(numerator: int, denominator: int) -> int:
-    if numerator < 0 or denominator <= 0:
-        raise ValueError("this helper expects a non-negative ratio")
-    quotient, remainder = divmod(numerator, denominator)
-    doubled = remainder * 2
-    if doubled > denominator or (doubled == denominator and quotient % 2):
-        quotient += 1
-    return quotient
-
-
 def quantize_logit(value: float) -> int:
     finite32 = _float32(value)
     with localcontext() as context:
@@ -138,42 +83,21 @@ def quantize_logit(value: float) -> int:
         return int(scaled.to_integral_value(rounding=ROUND_HALF_EVEN))
 
 
-def adjusted_score(logit: float, token_text: str, length_bias_milli: int) -> int:
-    if not 0 <= length_bias_milli <= 1000:
-        raise ValueError("length bias outside v1 range")
-    penalty = div_round_half_even(
-        length_bias_milli * LOGIT_SCALE * len(token_text),
-        1000,
-    )
-    return quantize_logit(logit) - penalty
-
-
-def normalized_visible_word(token_text: str) -> str:
-    text = unicodedata.normalize("NFKD", token_text).casefold()
-    text = "".join(character for character in text if not unicodedata.combining(character))
-    return text.strip(" .,!?:;'\"-_()")
+def adjusted_score(logit: float) -> int:
+    return quantize_logit(logit)
 
 
 def is_visible_token(token_text: str) -> bool:
+    """Allow ordinary text, including LF paragraphs; reject transport-breaking text."""
     if not token_text:
         return False
-    if any(character in token_text for character in ("\r", "\n", "\t", "\x00")):
+    if "\r" in token_text or "\x00" in token_text:
         return False
-    if "<|" in token_text or "|>" in token_text:
+    try:
+        token_text.encode("utf-8", errors="strict")
+    except UnicodeError:
         return False
-    if any(character in MARKUP_HEAVY_CHARACTERS for character in token_text):
-        return False
-    forbidden_categories = {"Cc", "Cs", "Co", "Cn"}
-    if any(unicodedata.category(character) in forbidden_categories for character in token_text):
-        return False
-    stripped = token_text.strip(" ")
-    if not any(
-        unicodedata.category(character).startswith("L")
-        or character in ORDINARY_PUNCTUATION
-        for character in stripped
-    ):
-        return False
-    return normalized_visible_word(token_text) not in META_WORDS_V1
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,18 +105,15 @@ class CandidateConfig:
     top_n: int
     candidate_pool_multiplier: int
     temperature_milli: int
-    length_bias_milli: int
 
     def __post_init__(self) -> None:
         requested = self.top_n * self.candidate_pool_multiplier
         if self.top_n < 2 or requested > MAX_MODEL_CANDIDATES:
-            raise ValueError("candidate pool size outside v1 range")
+            raise ValueError("candidate pool size outside protocol range")
         if not 1 <= self.candidate_pool_multiplier <= 16:
-            raise ValueError("candidate pool multiplier outside v1 range")
+            raise ValueError("candidate pool multiplier outside protocol range")
         if not 100 <= self.temperature_milli <= 2000:
-            raise ValueError("temperature outside v1 range")
-        if not 0 <= self.length_bias_milli <= 1000:
-            raise ValueError("length bias outside v1 range")
+            raise ValueError("temperature outside protocol range")
 
 
 def build_candidate_table(
@@ -201,7 +122,7 @@ def build_candidate_table(
     visible_prefix: Sequence[int],
     config: CandidateConfig,
 ) -> CandidateTable:
-    """Build one exact v1 candidate and frequency table from full logits."""
+    """Build one exact candidate and frequency table from full logits."""
     logits = model.next_logits(context_ids)
     specials = model.special_token_ids()
     ranked: list[tuple[int, int, float]] = []
@@ -228,7 +149,7 @@ def build_candidate_table(
             Candidate(
                 token_id=token_id,
                 token_text=token_text,
-                adjusted_score=adjusted_score(logit, token_text, config.length_bias_milli),
+                adjusted_score=adjusted_score(logit),
             )
         )
 

@@ -39,7 +39,7 @@ def address(private_key: x25519.X25519PrivateKey) -> dict[str, Any]:
             "revision": "0123456789abcdef0123456789abcdef01234567",
             "artifacts": [{"path": "config.json", "size": 2, "sha256": "0" * 64}],
             "runtime": {
-                "profile": "test-v1",
+                "profile": "test",
                 "python_version": "3.12.5",
                 "packages": {"cryptography": "49.0.0"},
                 "logits_dtype": "float32",
@@ -47,16 +47,15 @@ def address(private_key: x25519.X25519PrivateKey) -> dict[str, Any]:
             },
         },
         "codec": {
-            "id": "cm-arithmetic-v1",
+            "id": "cm-arithmetic",
             "top_n": 4,
             "candidate_pool_multiplier": 2,
             "frequency_total": 32768,
             "logit_scale": 1024,
             "temperature_milli": 1000,
-            "length_bias_milli": 100,
             "finish_tokens": 32,
-            "visible_filter": "cm-visible-email-v1",
-            "prompt_template": "cm-email-one-paragraph-v1",
+            "visible_filter": "cm-visible-email",
+            "prompt_template": "cm-email-continuation",
             "self_test": {
                 "steps": 4,
                 "path_indices": [0, 1, 3, 0],
@@ -70,8 +69,6 @@ def address(private_key: x25519.X25519PrivateKey) -> dict[str, Any]:
             "persona_sender": "une personne ordinaire",
             "persona_recipient": "un ami",
             "standing_context": "Des nouvelles du quotidien.",
-            "max_sentences": 4,
-            "max_questions": 1,
             "max_visible_characters": 4000,
         },
     }

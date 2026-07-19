@@ -1,4 +1,4 @@
-"""Visible first-sentence primer rules for cm-arithmetic-v2."""
+"""Visible first-sentence primer rules for Covermail."""
 
 from __future__ import annotations
 

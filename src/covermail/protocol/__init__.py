@@ -1,2 +1,1 @@
-"""Binary Covermail v1 protocol frames."""
-
+"""Binary Covermail protocol structures."""

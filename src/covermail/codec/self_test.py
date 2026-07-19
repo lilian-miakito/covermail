@@ -12,7 +12,7 @@ from covermail.codec.frequencies import table_counts
 from covermail.errors import ModelCompatibilityError
 
 SELF_TEST_SUBJECT = "Covermail deterministic compatibility test"
-SELF_TEST_PRIMER_V2 = "Je voulais te donner quelques nouvelles tranquillement."
+SELF_TEST_PRIMER = "Je voulais te donner quelques nouvelles tranquillement."
 SELF_TEST_STEPS = 4
 
 
@@ -32,7 +32,7 @@ def compute_self_test(
 ) -> SelfTestResult:
     """Compute the exact Section 16 transcript and SHA-256 digest."""
     if len(path_indices) != SELF_TEST_STEPS:
-        raise ValueError("v1 self-test requires exactly four steps")
+        raise ValueError("self-test requires exactly four steps")
     prompt_digest = hashlib.sha256(rendered_prompt.encode("utf-8", errors="strict")).digest()
     transcript = bytearray()
     prefix = list(initial_prefix)

@@ -1,4 +1,4 @@
-"""Strict v1 Covermail Address schema validation."""
+"""Strict Covermail Address schema validation."""
 
 from __future__ import annotations
 
@@ -42,7 +42,6 @@ _CODEC = {
     "frequency_total",
     "logit_scale",
     "temperature_milli",
-    "length_bias_milli",
     "finish_tokens",
     "visible_filter",
     "prompt_template",
@@ -56,8 +55,6 @@ _COVER = {
     "persona_sender",
     "persona_recipient",
     "standing_context",
-    "max_sentences",
-    "max_questions",
     "max_visible_characters",
 }
 _FORBIDDEN_ARTIFACT_SUFFIXES = {".bin", ".pt", ".pth", ".pkl", ".pickle", ".py", ".pyc"}
@@ -203,8 +200,7 @@ def _validate_model(value: object) -> None:
 def _validate_codec(value: object) -> None:
     codec = _object(value, "codec", _CODEC)
     codec_id = _string(codec["id"], "codec.id", minimum=1, maximum=64, ascii_only=True)
-    if codec_id not in {"cm-arithmetic-v1", "cm-arithmetic-v2"}:
-        raise AddressValidationError("codec.id is not a supported arithmetic profile")
+    _literal(codec_id, "codec.id", "cm-arithmetic")
     top_n = _integer(codec["top_n"], "codec.top_n", 2, 512)
     multiplier = _integer(
         codec["candidate_pool_multiplier"], "codec.candidate_pool_multiplier", 1, 16
@@ -214,17 +210,9 @@ def _validate_codec(value: object) -> None:
     _literal(codec["frequency_total"], "codec.frequency_total", 32768)
     _literal(codec["logit_scale"], "codec.logit_scale", 1024)
     _integer(codec["temperature_milli"], "codec.temperature_milli", 100, 2000)
-    length_bias = _integer(codec["length_bias_milli"], "codec.length_bias_milli", 0, 1000)
     _integer(codec["finish_tokens"], "codec.finish_tokens", 0, 128)
-    _literal(codec["visible_filter"], "codec.visible_filter", "cm-visible-email-v1")
-    expected_prompt = (
-        "cm-email-one-paragraph-v1"
-        if codec_id == "cm-arithmetic-v1"
-        else "cm-email-continue-primer-v2"
-    )
-    _literal(codec["prompt_template"], "codec.prompt_template", expected_prompt)
-    if codec_id == "cm-arithmetic-v2" and length_bias != 0:
-        raise AddressValidationError("cm-arithmetic-v2 requires zero length bias")
+    _literal(codec["visible_filter"], "codec.visible_filter", "cm-visible-email")
+    _literal(codec["prompt_template"], "codec.prompt_template", "cm-email-continuation")
 
     self_test = _object(codec["self_test"], "codec.self_test", _SELF_TEST)
     _literal(self_test["steps"], "codec.self_test.steps", 4)
@@ -254,15 +242,11 @@ def _validate_cover(value: object) -> None:
     for name in ("relationship", "tone", "persona_sender", "persona_recipient"):
         _string(cover[name], f"cover.{name}", minimum=1, maximum=512)
     _string(cover["standing_context"], "cover.standing_context", maximum=512)
-    max_sentences = _integer(cover["max_sentences"], "cover.max_sentences", 1, 8)
-    max_questions = _integer(cover["max_questions"], "cover.max_questions", 0, 2)
-    if max_questions > max_sentences:
-        raise AddressValidationError("cover.max_questions exceeds max_sentences")
     _integer(cover["max_visible_characters"], "cover.max_visible_characters", 200, 20000)
 
 
 def validate_address(value: object) -> Address:
-    """Validate and return a v1 address without mutating it."""
+    """Validate and return an address without mutating it."""
     address = _object(value, "$", _TOP_LEVEL)
     _literal(address["format"], "format", "covermail-address")
     _literal(address["version"], "version", 1)

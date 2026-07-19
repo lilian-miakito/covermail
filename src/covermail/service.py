@@ -1,33 +1,28 @@
-"""Stage 1 binary Covermail message orchestration."""
+"""Context-bound Covermail message encryption service."""
 
 from cryptography.hazmat.primitives.asymmetric import x25519
 
 from covermail.address.schema import Address, validate_address
 from covermail.crypto.hpke import decrypt_inner, encrypt_inner
 from covermail.protocol.inner_frame import pack_inner, unpack_inner
-from covermail.protocol.outer_frame import (
-    build_outer_payload,
-    pack_stego_frame,
-    parse_outer_payload,
-    unpack_stego_frame,
-)
+from covermail.protocol.stego_stream import pack_stream, unpack_stream
 
 
-def encrypt_message(address: Address, secret: str) -> bytes:
+def encrypt_message(address: Address, secret: str, subject: str, primer: str) -> bytes:
     validated = validate_address(address)
     inner = pack_inner(secret)
-    hpke_blob = encrypt_inner(validated, inner)
-    payload = build_outer_payload(validated, hpke_blob)
-    return pack_stego_frame(payload)
+    hpke_blob = encrypt_inner(validated, inner, subject, primer)
+    return pack_stream(validated, hpke_blob, subject, primer)
 
 
 def decrypt_message(
     address: Address,
     private_key: x25519.X25519PrivateKey,
-    frame: bytes,
+    stream: bytes,
+    subject: str,
+    primer: str,
 ) -> tuple[bytes, str]:
     validated = validate_address(address)
-    payload = unpack_stego_frame(frame)
-    hpke_blob = parse_outer_payload(validated, payload)
-    inner = decrypt_inner(validated, private_key, hpke_blob)
+    hpke_blob = unpack_stream(validated, stream, subject, primer)
+    inner = decrypt_inner(validated, private_key, hpke_blob, subject, primer)
     return unpack_inner(inner)
