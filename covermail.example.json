@@ -1,0 +1,63 @@
+{
+  "format": "covermail-address",
+  "version": 1,
+  "recipient": {
+    "label": "Alice",
+    "hpke_public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "hpke": {
+    "kem": "DHKEM_X25519_HKDF_SHA256",
+    "kdf": "HKDF_SHA256",
+    "aead": "AES_128_GCM",
+    "mode": "BASE"
+  },
+  "model": {
+    "backend": "mlx-lm",
+    "model_id": "example/covermail-stage1-placeholder",
+    "revision": "0000000000000000000000000000000000000000",
+    "artifacts": [
+      {
+        "path": "config.json",
+        "size": 0,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "runtime": {
+      "profile": "stage1-binary-only",
+      "python_version": "3.12.5",
+      "packages": {
+        "cryptography": "49.0.0"
+      },
+      "logits_dtype": "float32",
+      "trust_remote_code": false
+    }
+  },
+  "codec": {
+    "id": "cm-arithmetic-v1",
+    "top_n": 256,
+    "candidate_pool_multiplier": 8,
+    "frequency_total": 32768,
+    "logit_scale": 1024,
+    "temperature_milli": 1000,
+    "length_bias_milli": 100,
+    "finish_tokens": 32,
+    "visible_filter": "cm-visible-email-v1",
+    "prompt_template": "cm-email-one-paragraph-v1",
+    "self_test": {
+      "steps": 4,
+      "path_indices": [0, 1, 255, 0],
+      "expected_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "cover": {
+    "language": "fr-FR",
+    "relationship": "deux amis proches",
+    "tone": "familier, calme et naturel",
+    "persona_sender": "une personne ordinaire écrivant un bref email",
+    "persona_recipient": "un ami de longue date",
+    "standing_context": "Ils échangent occasionnellement des nouvelles du quotidien.",
+    "max_sentences": 4,
+    "max_questions": 1,
+    "max_visible_characters": 4000
+  }
+}

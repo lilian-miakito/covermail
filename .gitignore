@@ -1,0 +1,14 @@
+.DS_Store
+.covermail/
+.coverage
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.py[cod]
+*.private.json
+*.tmp
+coverage.xml
+htmlcov/
