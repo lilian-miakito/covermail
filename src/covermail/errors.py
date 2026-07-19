@@ -51,3 +51,11 @@ class CarrierTokenizationError(CovermailError):
 
 class CarrierArithmeticError(CovermailError):
     """The carrier arithmetic stream is malformed or incomplete."""
+
+
+class ModelProfileError(CovermailError):
+    """A model profile, runtime, or artifact set is not qualified for use."""
+
+
+class ModelCompatibilityError(ModelProfileError):
+    """The deterministic model compatibility self-test failed."""

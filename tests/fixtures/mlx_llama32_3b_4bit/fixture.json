@@ -1,0 +1,19 @@
+{
+  "frame_base64": "cQH8uB6VC13Beg7Z0ukWyCv89BmVd+Qn0D/wUok0MLzPVVeXYXP7SK3aOxGjetbThn9PKsZSjLX4bK76lztr0S4yKBPNxTo+DcpFE8jCSF7juWMRIICkHv82H6RlbrWq+bQ06fCX7KtMo7YotNmd7h3M",
+  "metrics": {
+    "bridge_tokens": 61,
+    "characters": 1021,
+    "confirmed_bits": 914,
+    "data_tokens": 238,
+    "finish_tokens": 2,
+    "source_bits_read": 946,
+    "tokens": 301
+  },
+  "plaintext": "On se retrouve jeudi à 18 h.",
+  "subject": "Des nouvelles du jardin",
+  "timing_seconds": {
+    "decode": 96.639,
+    "encode": 98.565,
+    "load_and_self_test": 4.156
+  }
+}

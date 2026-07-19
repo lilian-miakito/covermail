@@ -21,6 +21,10 @@ dev = [
   "pytest-cov==6.2.1",
   "ruff==0.12.3",
 ]
+mlx = [
+  "mlx==0.31.2",
+  "mlx-lm==0.31.3",
+]
 
 [project.scripts]
 covermail = "covermail.cli:main"

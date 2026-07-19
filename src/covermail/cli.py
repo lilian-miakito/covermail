@@ -1,4 +1,4 @@
-"""Offline Stage 1 protocol and Stage 2 fake-carrier CLI."""
+"""Offline Covermail protocol, fake codec, and qualified Stage 3 model CLI."""
 
 from __future__ import annotations
 
@@ -19,6 +19,9 @@ from covermail.codec.generative import decode_carrier, encode_carrier
 from covermail.crypto.identity import generate_identity
 from covermail.crypto.private_store import save_identity, unlock_identity
 from covermail.errors import CovermailError
+from covermail.models.manifest import build_artifact_manifest, materialize_artifact_tree
+from covermail.models.mlx_adapter import MODEL_ARTIFACT_PATHS
+from covermail.models.profile import load_profile
 from covermail.protocol.inner_frame import MAX_SECRET_UTF8_BYTES
 from covermail.protocol.outer_frame import MAX_STEGO_PAYLOAD_BYTES
 from covermail.service import decrypt_message, encrypt_message
@@ -134,8 +137,76 @@ def _fake_encode(args: argparse.Namespace) -> int:
 
 def _fake_decode(args: argparse.Namespace) -> int:
     raw = _read_limited(args.carrier, 800000)
-    carrier = raw.decode("utf-8", errors="strict")
+    carrier = _carrier_text(raw)
     frame = decode_carrier(carrier, FakeLanguageModel())
+    _write_bytes(args.output, frame)
+    if args.output != "-":
+        print(f"recovered {len(frame)} framed bytes", file=sys.stderr)
+    return 0
+
+
+def _carrier_text(raw: bytes) -> str:
+    """Decode UTF-8 and remove at most one text-area/file terminal line ending."""
+    text = raw.decode("utf-8", errors="strict")
+    if text.endswith("\r\n"):
+        return text[:-2]
+    if text.endswith(("\r", "\n")):
+        return text[:-1]
+    return text
+
+
+def _model_prepare(args: argparse.Namespace) -> int:
+    materialize_artifact_tree(args.source, args.destination, MODEL_ARTIFACT_PATHS)
+    manifest = build_artifact_manifest(args.destination, MODEL_ARTIFACT_PATHS)
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0
+
+
+def _model_self_test(args: argparse.Namespace) -> int:
+    address = _address(args.address)
+    loaded = load_profile(address, args.model_root, args.subject)
+    print(
+        json.dumps(
+            {
+                "selected_token_ids": loaded.self_test.selected_token_ids,
+                "sha256": loaded.self_test.sha256,
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def _carrier_encode(args: argparse.Namespace) -> int:
+    address = _address(args.address)
+    loaded = load_profile(address, args.model_root, args.subject)
+    codec = address["codec"]
+    cover = address["cover"]
+    result = encode_carrier(
+        _read_bytes(args.frame),
+        loaded.model,
+        finish_tokens=codec["finish_tokens"],
+        maximum_characters=cover["max_visible_characters"],
+    )
+    _write_bytes(args.output, result.text.encode("utf-8"))
+    if args.output != "-":
+        metadata = {"metrics": asdict(result.metrics), "tokens": len(result.token_ids)}
+        print(json.dumps(metadata, sort_keys=True), file=sys.stderr)
+    return 0
+
+
+def _carrier_decode(args: argparse.Namespace) -> int:
+    address = _address(args.address)
+    loaded = load_profile(address, args.model_root, args.subject)
+    codec = address["codec"]
+    cover = address["cover"]
+    raw = _read_limited(args.carrier, cover["max_visible_characters"] * 4)
+    frame = decode_carrier(
+        _carrier_text(raw),
+        loaded.model,
+        finish_tokens=codec["finish_tokens"],
+        maximum_characters=cover["max_visible_characters"],
+    )
     _write_bytes(args.output, frame)
     if args.output != "-":
         print(f"recovered {len(frame)} framed bytes", file=sys.stderr)
@@ -145,7 +216,7 @@ def _fake_decode(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="covermail",
-        description="Covermail v1 Stage 1 protocol and Stage 2 fake-carrier tools",
+        description="Covermail v1 protocol and qualified offline carrier tools",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -190,6 +261,46 @@ def build_parser() -> argparse.ArgumentParser:
     fake_decode.add_argument("--carrier", required=True, help="UTF-8 input file, or -")
     fake_decode.add_argument("--output", required=True, help="binary output file, or -")
     fake_decode.set_defaults(handler=_fake_decode)
+
+    prepare = subparsers.add_parser(
+        "model-prepare",
+        help="materialize the qualified model snapshot and print its manifest",
+    )
+    prepare.add_argument("--source", type=Path, required=True, help="trusted snapshot directory")
+    prepare.add_argument(
+        "--destination", type=Path, required=True, help="new qualified artifact directory"
+    )
+    prepare.set_defaults(handler=_model_prepare)
+
+    self_test = subparsers.add_parser(
+        "model-self-test", help="verify artifacts, runtime, and address model self-test"
+    )
+    self_test.add_argument("address", type=Path)
+    self_test.add_argument("--model-root", type=Path, required=True)
+    self_test.add_argument(
+        "--subject", default="Covermail model readiness check", help="ordinary prompt smoke test"
+    )
+    self_test.set_defaults(handler=_model_self_test)
+
+    carrier_encode = subparsers.add_parser(
+        "carrier-encode", help="map a framed message to a qualified real-model carrier"
+    )
+    carrier_encode.add_argument("address", type=Path)
+    carrier_encode.add_argument("--model-root", type=Path, required=True)
+    carrier_encode.add_argument("--subject", required=True)
+    carrier_encode.add_argument("--frame", required=True, help="binary input file, or -")
+    carrier_encode.add_argument("--output", required=True, help="UTF-8 carrier file, or -")
+    carrier_encode.set_defaults(handler=_carrier_encode)
+
+    carrier_decode = subparsers.add_parser(
+        "carrier-decode", help="recover a framed message from a qualified real-model carrier"
+    )
+    carrier_decode.add_argument("address", type=Path)
+    carrier_decode.add_argument("--model-root", type=Path, required=True)
+    carrier_decode.add_argument("--subject", required=True)
+    carrier_decode.add_argument("--carrier", required=True, help="UTF-8 carrier file, or -")
+    carrier_decode.add_argument("--output", required=True, help="binary output file, or -")
+    carrier_decode.set_defaults(handler=_carrier_decode)
     return parser
 
 

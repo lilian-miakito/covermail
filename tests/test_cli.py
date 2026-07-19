@@ -7,6 +7,7 @@ from typing import Any
 
 from covermail.address.canonical import canonical_json
 from covermail.cli import main
+from covermail.models.mlx_adapter import MODEL_ARTIFACT_PATHS
 
 
 def test_cli_independent_binary_round_trip(
@@ -91,3 +92,43 @@ def test_cli_fake_carrier_round_trip(tmp_path: Path, capsys: Any) -> None:
         ["fake-decode", "--carrier", str(carrier), "--output", str(recovered)]
     ) == 0
     assert recovered.read_bytes() == frame.read_bytes()
+
+
+def test_cli_fake_decode_allows_exactly_one_terminal_line_ending(
+    tmp_path: Path, capsys: Any
+) -> None:
+    from covermail.codec.fake_model import FakeLanguageModel
+    from covermail.codec.generative import encode_carrier
+    from covermail.protocol.outer_frame import pack_stego_frame
+
+    frame = pack_stego_frame(b"terminal line ending")
+    carrier = encode_carrier(frame, FakeLanguageModel()).text
+    carrier_path = tmp_path / "carrier.txt"
+    output = tmp_path / "decoded.cm"
+    carrier_path.write_text(carrier + "\r\n", encoding="utf-8", newline="")
+    assert main(
+        ["fake-decode", "--carrier", str(carrier_path), "--output", str(output)]
+    ) == 0
+    capsys.readouterr()
+    assert output.read_bytes() == frame
+
+
+def test_cli_model_prepare_materializes_regular_tree(tmp_path: Path, capsys: Any) -> None:
+    source = tmp_path / "snapshot"
+    destination = tmp_path / "qualified"
+    source.mkdir()
+    for index, relative_path in enumerate(MODEL_ARTIFACT_PATHS):
+        (source / relative_path).write_bytes(f"artifact-{index}".encode())
+
+    assert main(
+        [
+            "model-prepare",
+            "--source",
+            str(source),
+            "--destination",
+            str(destination),
+        ]
+    ) == 0
+    manifest = json.loads(capsys.readouterr().out)
+    assert [entry["path"] for entry in manifest] == sorted(MODEL_ARTIFACT_PATHS)
+    assert all((destination / path).is_file() for path in MODEL_ARTIFACT_PATHS)
