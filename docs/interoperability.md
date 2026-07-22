@@ -1,23 +1,33 @@
 # Interoperability status
 
-The pure protocol and fake-model layers round-trip arbitrary practical payloads
-through the 32-bit inverse arithmetic coder without special low-entropy states.
-The complete automated suite also covers HPKE, context binding, masking,
-termination, tokenizer round trips, LF carrier text, and CLI orchestration.
+The pure protocol and fake-model layers round-trip practical payloads through
+the continuous 32-bit inverse arithmetic coder without bridge states. The
+automated suite covers fixed encrypted B framing, variable C recovery, HPKE,
+A binding, tokenizer round trips, LF carrier text, ignored D tails and CLI/UI
+orchestration.
 
-The single MLX profile passes its deterministic model self-test on the local
-qualified host. Its exact artifacts and runtime are pinned in the public
-address fixture.
+The MLX profile passes its deterministic self-test on the local qualification
+host. Its exact artifacts and runtime are pinned in the public address fixture.
+The committed real-model bundle exercises three writing briefs with freshly
+sampled A prefixes and exact byte-for-byte recovery of B and C. D is neither
+reconstructed nor compared.
 
-The committed real-model fixture completes an encode/decode/HPKE round trip for
-the active codec on the local qualification host. It contains ten LF characters
-and recovers all 114 stream bytes exactly. `K_all` is 12.3947 characters per
-stream byte; reference times are 132.13 s encode and 129.62 s decode.
+`covermail model-qualify` implements the cross-installation exchange. A bundle
+contains each visible carrier, exact A token IDs and encrypted B/C bytes, but no
+private key or hidden plaintext. Verification rebuilds the fixed payload model
+context from the observed A tokens, decodes B/C and compares the packet bytes.
+Lexical signals are reported but never determine packet validity.
+
+The current accepted carriers contain 150, 169 and 171 encrypted packet bytes,
+710–777 total tokens and `K_all = 18.4201..18.4503`. All three passed on their
+first trial with the 64-token A and fixed 1,200-word payload horizon, without a
+lexical flag. Under the earlier short-horizon prompt, journey and dinner each
+required a local retry after reaching the 4096-step budget. This prompt-level
+result does not turn the local budget into a wire-format rule.
 
 Before claiming interoperability:
 
-1. optimize candidate construction without changing the exact final tables;
-2. profile and improve carrier quality without altering arithmetic recovery;
-3. exchange independently generated carriers between two clean compatible
-   installations;
-4. compare decoded bytes and plaintext bit-for-bit.
+1. reproduce the self-test and candidate construction on another clean host;
+2. verify the first host's bundle on the second host;
+3. generate a fresh bundle on the second host and verify it on the first;
+4. review visible prose quality separately from bit-exact interoperability.

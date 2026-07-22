@@ -1,4 +1,4 @@
-"""Fail-closed loading of the first exact real-model profile."""
+"""Fail-closed loading of the exact A/B/C/D model profile."""
 
 from __future__ import annotations
 
@@ -9,13 +9,7 @@ from typing import Any, cast
 
 from covermail.address.schema import Address, validate_address
 from covermail.codec.candidates import CandidateConfig, PromptedLanguageModel
-from covermail.codec.self_test import (
-    SELF_TEST_PRIMER,
-    SELF_TEST_SUBJECT,
-    SelfTestResult,
-    verify_self_test,
-)
-from covermail.cover.primer import validate_primer
+from covermail.codec.self_test import SelfTestResult, verify_self_test
 from covermail.errors import ModelProfileError
 from covermail.models.mlx_adapter import (
     MODEL_ID,
@@ -28,9 +22,12 @@ from covermail.models.mlx_adapter import (
 
 @dataclass(frozen=True, slots=True)
 class LoadedProfile:
-    model: PromptedLanguageModel
-    rendered_prompt: str
-    primer_ids: tuple[int, ...]
+    prefix_model: PromptedLanguageModel
+    payload_model: PromptedLanguageModel
+    finish_model: PromptedLanguageModel
+    rendered_prefix_prompt: str
+    rendered_payload_prompt: str
+    rendered_finish_prompt: str
     self_test: SelfTestResult
 
 
@@ -59,46 +56,47 @@ def _require_exact_profile(address: Address) -> tuple[Mapping[str, Any], Mapping
 def load_profile(
     address: Address,
     model_root: Path,
-    subject: str,
-    primer: str | None = None,
+    writing_brief: str = "",
+    *,
+    adapter: MlxLanguageModel | None = None,
 ) -> LoadedProfile:
-    """Verify artifacts/runtime/self-test, then bind the ordinary subject prompt."""
     validated = validate_address(address)
     model_fields, codec = _require_exact_profile(validated)
     artifacts = model_fields.get("artifacts")
     if not isinstance(artifacts, list):
         raise ModelProfileError("address model artifacts are invalid")
-    adapter = MlxLanguageModel.load(model_root, artifacts)
+    if adapter is None:
+        adapter = MlxLanguageModel.load(model_root, artifacts)
     cover = _mapping(validated["cover"], "cover")
     config = CandidateConfig(
-        top_n=cast(int, codec["top_n"]),
+        top_k=cast(int, codec["top_k"]),
         candidate_pool_multiplier=cast(int, codec["candidate_pool_multiplier"]),
         temperature_milli=cast(int, codec["temperature_milli"]),
     )
 
-    test_prompt = adapter.render_prompt(cover, SELF_TEST_SUBJECT, SELF_TEST_PRIMER)
-    test_primer_ids = adapter.tokenize(SELF_TEST_PRIMER)
-    test_model = PromptedLanguageModel(adapter, adapter.tokenize(test_prompt), config)
+    payload_prompt = adapter.render_prompt(cover, "payload")
+    payload_model = PromptedLanguageModel(adapter, adapter.tokenize(payload_prompt), config)
     self_test_fields = _mapping(codec["self_test"], "codec.self_test")
     path_indices = self_test_fields["path_indices"]
     if not isinstance(path_indices, list) or not all(
         isinstance(item, int) for item in path_indices
     ):
         raise ModelProfileError("address self-test path is invalid")
-    result = verify_self_test(
-        test_model,
-        test_prompt,
+    self_test = verify_self_test(
+        payload_model,
+        payload_prompt,
         cast(list[int], path_indices),
         cast(str, self_test_fields["expected_sha256"]),
-        initial_prefix=test_primer_ids,
     )
 
-    if primer is None:
-        raise ModelProfileError("the Covermail profile requires a visible primer")
-    exact_primer = validate_primer(primer)
-    rendered_prompt = adapter.render_prompt(cover, subject, exact_primer)
-    primer_ids = adapter.tokenize(exact_primer)
-    if adapter.detokenize(primer_ids) != exact_primer:
-        raise ModelProfileError("visible primer does not round-trip through the tokenizer")
-    prompted = PromptedLanguageModel(adapter, adapter.tokenize(rendered_prompt), config)
-    return LoadedProfile(prompted, rendered_prompt, tuple(primer_ids), result)
+    prefix_prompt = adapter.render_prompt(cover, "prefix", writing_brief=writing_brief)
+    finish_prompt = adapter.render_prompt(cover, "finish")
+    return LoadedProfile(
+        PromptedLanguageModel(adapter, adapter.tokenize(prefix_prompt), config),
+        payload_model,
+        PromptedLanguageModel(adapter, adapter.tokenize(finish_prompt), config),
+        prefix_prompt,
+        payload_prompt,
+        finish_prompt,
+        self_test,
+    )

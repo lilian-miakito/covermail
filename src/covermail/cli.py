@@ -7,6 +7,7 @@ import getpass
 import json
 import os
 import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import NoReturn
@@ -15,7 +16,6 @@ from covermail.address.canonical import canonical_json, read_address_file
 from covermail.address.fingerprint import human_fingerprint, machine_address_id
 from covermail.address.schema import Address, validate_address
 from covermail.codec.carrier import decode_carrier, encode_carrier
-from covermail.cover.primer import extract_primer, validate_primer
 from covermail.cover.transport import canonical_carrier
 from covermail.crypto.identity import generate_identity
 from covermail.crypto.private_store import save_identity, unlock_identity
@@ -23,9 +23,12 @@ from covermail.errors import CovermailError
 from covermail.models.manifest import build_artifact_manifest, materialize_artifact_tree
 from covermail.models.mlx_adapter import MODEL_ARTIFACT_PATHS
 from covermail.models.profile import load_profile
+from covermail.models.qualification import (
+    generate_qualification_bundle,
+    read_qualification_bundle,
+    verify_qualification_bundle,
+)
 from covermail.protocol.inner_frame import MAX_SECRET_UTF8_BYTES
-from covermail.protocol.stego_stream import MAX_STREAM_BYTES
-from covermail.service import decrypt_message, encrypt_message
 
 
 def _address(path: Path) -> Address:
@@ -46,10 +49,6 @@ def _read_limited(path: str, maximum: int) -> bytes:
 def _read_text(path: str) -> str:
     raw = _read_limited(path, MAX_SECRET_UTF8_BYTES)
     return raw.decode("utf-8", errors="strict")
-
-
-def _read_stream(path: str) -> bytes:
-    return _read_limited(path, MAX_STREAM_BYTES)
 
 
 def _write_bytes(path: str, data: bytes) -> None:
@@ -108,35 +107,6 @@ def _inspect_address(args: argparse.Namespace) -> int:
     return 0
 
 
-def _encrypt(args: argparse.Namespace) -> int:
-    address = _address(args.address)
-    stream = encrypt_message(
-        address,
-        _read_text(args.message),
-        args.subject,
-        validate_primer(args.primer),
-    )
-    _write_bytes(args.output, stream)
-    if args.output != "-":
-        print(f"wrote {len(stream)} stream bytes", file=sys.stderr)
-    return 0
-
-
-def _decrypt(args: argparse.Namespace) -> int:
-    address, private_key = unlock_identity(args.identity_dir, _passphrase(confirm=False))
-    _, secret = decrypt_message(
-        address,
-        private_key,
-        _read_stream(args.stream),
-        args.subject,
-        validate_primer(args.primer),
-    )
-    _write_text(args.output, secret)
-    if args.output != "-":
-        print(f"wrote {len(secret.encode('utf-8'))} plaintext bytes", file=sys.stderr)
-    return 0
-
-
 def _carrier_text(raw: bytes) -> str:
     """Decode UTF-8 and remove at most one text-area/file terminal line ending."""
     text = raw.decode("utf-8", errors="strict")
@@ -156,7 +126,7 @@ def _model_prepare(args: argparse.Namespace) -> int:
 
 def _model_self_test(args: argparse.Namespace) -> int:
     address = _address(args.address)
-    loaded = load_profile(address, args.model_root, args.subject, args.primer)
+    loaded = load_profile(address, args.model_root)
     print(
         json.dumps(
             {
@@ -169,30 +139,72 @@ def _model_self_test(args: argparse.Namespace) -> int:
     return 0
 
 
+def _model_qualify(args: argparse.Namespace) -> int:
+    address = _address(args.address)
+
+    def progress(message: str) -> None:
+        print(message, file=sys.stderr, flush=True)
+
+    if args.verify_bundle is None:
+        report = generate_qualification_bundle(address, args.model_root, progress=progress)
+        action = "generated"
+    else:
+        bundle = read_qualification_bundle(args.verify_bundle)
+        report = verify_qualification_bundle(
+            address,
+            args.model_root,
+            bundle,
+            progress=progress,
+        )
+        action = "verified"
+    _write_text(
+        args.output,
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+    )
+    cases = report["cases"]
+    if not isinstance(cases, list):
+        raise CovermailError("qualification report has invalid cases")
+    print(
+        json.dumps(
+            {
+                "action": action,
+                "cases": len(cases),
+                "output": args.output,
+            },
+            sort_keys=True,
+        ),
+        file=sys.stderr,
+    )
+    return 0
+
+
 def _carrier_encode(args: argparse.Namespace) -> int:
     address = _address(args.address)
     codec = address["codec"]
     cover = address["cover"]
-    primer = validate_primer(args.primer)
-    loaded = load_profile(address, args.model_root, args.subject, primer)
-    stream = _read_stream(args.stream)
+    secret = _read_text(args.message)
+    loaded = load_profile(address, args.model_root, args.prompt)
+    started = time.perf_counter()
     result = encode_carrier(
-        stream,
-        loaded.model,
+        secret,
+        loaded.prefix_model,
+        loaded.payload_model,
+        loaded.finish_model,
         address,
-        args.subject,
-        primer,
-        loaded.primer_ids,
-        finish_tokens=codec["finish_tokens"],
+        prefix_tokens=codec["prefix_tokens"],
+        finish_tokens=args.finish_tokens,
         maximum_characters=cover["max_visible_characters"],
     )
+    elapsed = time.perf_counter() - started
     _write_bytes(args.output, result.text.encode("utf-8"))
     if args.output != "-":
         metadata = {
             "characters": len(result.text),
-            "k_all": len(result.text) / len(stream),
+            "elapsed_seconds": elapsed,
+            "generated_tokens_per_second": len(result.token_ids) / elapsed,
+            "k_all": len(result.text) / (len(result.metadata) + len(result.body)),
             "metrics": asdict(result.metrics),
-            "stream_bytes": len(stream),
+            "packet_bytes": len(result.metadata) + len(result.body),
             "tokens": len(result.token_ids),
             "utf8_bytes": len(result.text.encode("utf-8")),
         }
@@ -201,28 +213,54 @@ def _carrier_encode(args: argparse.Namespace) -> int:
 
 
 def _carrier_decode(args: argparse.Namespace) -> int:
-    address = _address(args.address)
+    address, private_key = unlock_identity(args.identity_dir, _passphrase(confirm=False))
     codec = address["codec"]
     cover = address["cover"]
     raw = _read_limited(args.carrier, cover["max_visible_characters"] * 4)
     carrier = _carrier_text(raw)
-    primer = extract_primer(carrier)
-    loaded = load_profile(address, args.model_root, args.subject, primer)
-    stream = decode_carrier(
+    loaded = load_profile(address, args.model_root)
+    started = time.perf_counter()
+    decoded = decode_carrier(
         carrier,
-        loaded.model,
+        loaded.payload_model,
         address,
-        args.subject,
-        primer,
-        loaded.primer_ids,
-        finish_tokens=codec["finish_tokens"],
+        private_key,
+        prefix_tokens=codec["prefix_tokens"],
         maximum_characters=cover["max_visible_characters"],
     )
-    if args.primer_output is not None:
-        _write_text(args.primer_output, primer)
-    _write_bytes(args.output, stream)
+    elapsed = time.perf_counter() - started
+    _write_text(args.output, decoded.secret)
     if args.output != "-":
-        print(f"recovered {len(stream)} stream bytes", file=sys.stderr)
+        print(
+            json.dumps(
+                {
+                    "elapsed_seconds": elapsed,
+                    "plaintext_utf8_bytes": len(decoded.secret.encode("utf-8")),
+                    "consumed_tokens": decoded.carrier.consumed_tokens,
+                    "tokens_per_second": decoded.carrier.consumed_tokens / elapsed,
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+    return 0
+
+
+def _local_app(args: argparse.Namespace) -> int:
+    from covermail.web import AppConfig, run_local_app
+
+    try:
+        run_local_app(
+            AppConfig(
+                model_root=args.model_root,
+                identities_dir=args.identities_dir,
+                host=args.host,
+                port=args.port,
+                template_path=args.address_template,
+            )
+        )
+    except ValueError as error:
+        raise CovermailError(str(error)) from error
     return 0
 
 
@@ -243,26 +281,6 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("address", type=Path)
     inspect.set_defaults(handler=_inspect_address)
 
-    encrypt = subparsers.add_parser("encrypt", help="encrypt UTF-8 text to a binary stream")
-    encrypt.add_argument("address", type=Path)
-    encrypt.add_argument("--subject", required=True)
-    encrypt.add_argument("--primer", required=True)
-    encrypt.add_argument("--message", required=True, help="UTF-8 file, or - for standard input")
-    encrypt.add_argument(
-        "--output", required=True, help="binary output file, or - for standard output"
-    )
-    encrypt.set_defaults(handler=_encrypt)
-
-    decrypt = subparsers.add_parser("decrypt", help="decrypt a binary stream")
-    decrypt.add_argument("identity_dir", type=Path)
-    decrypt.add_argument("--subject", required=True)
-    decrypt.add_argument("--primer", required=True)
-    decrypt.add_argument("--stream", required=True, help="binary input file, or -")
-    decrypt.add_argument(
-        "--output", required=True, help="UTF-8 output file, or - for standard output"
-    )
-    decrypt.set_defaults(handler=_decrypt)
-
     prepare = subparsers.add_parser(
         "model-prepare",
         help="materialize the qualified model snapshot and print its manifest",
@@ -278,37 +296,54 @@ def build_parser() -> argparse.ArgumentParser:
     )
     self_test.add_argument("address", type=Path)
     self_test.add_argument("--model-root", type=Path, required=True)
-    self_test.add_argument(
-        "--subject", default="Covermail model readiness check", help="ordinary prompt smoke test"
-    )
-    self_test.add_argument(
-        "--primer",
-        default="Je voulais justement te donner quelques nouvelles tranquillement.",
-        help="valid ordinary primer",
-    )
     self_test.set_defaults(handler=_model_self_test)
 
+    qualify = subparsers.add_parser(
+        "model-qualify",
+        help="generate or cross-verify the fixed real-model qualification corpus",
+    )
+    qualify.add_argument("address", type=Path)
+    qualify.add_argument("--model-root", type=Path, required=True)
+    qualify.add_argument(
+        "--verify-bundle",
+        type=Path,
+        help="decode and verify a bundle generated by another installation",
+    )
+    qualify.add_argument("--output", required=True, help="qualification JSON output, or -")
+    qualify.set_defaults(handler=_model_qualify)
+
     carrier_encode = subparsers.add_parser(
-        "carrier-encode", help="map a framed message to a qualified real-model carrier"
+        "carrier-encode", help="encrypt text and generate an A/B/C/D carrier"
     )
     carrier_encode.add_argument("address", type=Path)
     carrier_encode.add_argument("--model-root", type=Path, required=True)
-    carrier_encode.add_argument("--subject", required=True)
-    carrier_encode.add_argument("--primer", required=True, help="exact first sentence")
-    carrier_encode.add_argument("--stream", required=True, help="binary input file, or -")
+    carrier_encode.add_argument("--prompt", required=True, help="free writing brief for A")
+    carrier_encode.add_argument("--message", required=True, help="UTF-8 secret file, or -")
+    carrier_encode.add_argument("--finish-tokens", type=int, default=64)
     carrier_encode.add_argument("--output", required=True, help="UTF-8 carrier file, or -")
     carrier_encode.set_defaults(handler=_carrier_encode)
 
     carrier_decode = subparsers.add_parser(
-        "carrier-decode", help="recover a framed message from a qualified real-model carrier"
+        "carrier-decode", help="recover plaintext from an A/B/C/D carrier"
     )
-    carrier_decode.add_argument("address", type=Path)
+    carrier_decode.add_argument("identity_dir", type=Path)
     carrier_decode.add_argument("--model-root", type=Path, required=True)
-    carrier_decode.add_argument("--subject", required=True)
     carrier_decode.add_argument("--carrier", required=True, help="UTF-8 carrier file, or -")
-    carrier_decode.add_argument("--output", required=True, help="binary output file, or -")
-    carrier_decode.add_argument("--primer-output", help="write the extracted primer")
+    carrier_decode.add_argument("--output", required=True, help="UTF-8 output file, or -")
     carrier_decode.set_defaults(handler=_carrier_decode)
+
+    app = subparsers.add_parser("app", help="run the loopback-only Covermail web application")
+    app.add_argument("--model-root", type=Path, required=True)
+    app.add_argument(
+        "--identities-dir",
+        type=Path,
+        default=Path(".covermail/identities"),
+        help="encrypted local identity directory",
+    )
+    app.add_argument("--address-template", type=Path, help="advanced profile override")
+    app.add_argument("--host", default="127.0.0.1", help="loopback IP literal only")
+    app.add_argument("--port", type=int, default=8765)
+    app.set_defaults(handler=_local_app)
     return parser
 
 

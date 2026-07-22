@@ -1,63 +1,105 @@
-"""Primer-aware carrier orchestration for Covermail."""
+"""High-level A/B/C/D carrier orchestration."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from cryptography.hazmat.primitives.asymmetric import x25519
+
 from covermail.address.schema import Address
-from covermail.codec.candidates import TokenModel
+from covermail.codec.candidates import GreedyTokenModel, TokenModel
 from covermail.codec.generative import (
     DEFAULT_FINISH_TOKENS,
+    DEFAULT_PREFIX_TOKENS,
     MAX_FAKE_CARRIER_CHARACTERS,
+    CarrierDecodeProgress,
     CarrierResult,
-    decode_carrier_stream,
-    encode_carrier_stream,
+    CarrierTokenEvent,
+    DecodedCarrier,
+    decode_carrier_sections,
+    encode_carrier_sections,
+    generate_prefix_tokens,
 )
 from covermail.cover.transport import canonical_carrier
-from covermail.protocol.stego_stream import StreamLengthResolver, unpack_stream
+from covermail.service import (
+    METADATA_CAPSULE_BYTES,
+    EncryptedPacket,
+    decrypt_message,
+    decrypt_metadata,
+    encrypt_message,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class DecodedMessage:
+    message_id: bytes
+    secret: str
+    carrier: DecodedCarrier
 
 
 def encode_carrier(
-    stream: bytes,
-    model: TokenModel,
+    secret: str,
+    prefix_model: TokenModel,
+    payload_model: TokenModel,
+    finish_model: GreedyTokenModel,
     address: Address,
-    subject: str,
-    primer: str,
-    primer_ids: tuple[int, ...],
     *,
+    prefix_tokens: int = DEFAULT_PREFIX_TOKENS,
     finish_tokens: int = DEFAULT_FINISH_TOKENS,
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
+    random_below: Callable[[int], int] | None = None,
+    on_token: Callable[[CarrierTokenEvent], None] | None = None,
 ) -> CarrierResult:
-    unpack_stream(address, stream, subject, primer)
-    return encode_carrier_stream(
-        stream,
-        model,
-        initial_token_ids=primer_ids,
+    if random_below is None:
+        prefix = generate_prefix_tokens(prefix_model, count=prefix_tokens, on_token=on_token)
+    else:
+        prefix = generate_prefix_tokens(
+            prefix_model,
+            count=prefix_tokens,
+            random_below=random_below,
+            on_token=on_token,
+        )
+    packet = encrypt_message(address, secret, prefix)
+    return encode_carrier_sections(
+        prefix,
+        packet.metadata,
+        packet.body,
+        payload_model,
+        finish_model,
         finish_tokens=finish_tokens,
         maximum_characters=maximum_characters,
+        on_token=on_token,
     )
 
 
 def decode_carrier(
     carrier: str,
-    model: TokenModel,
+    payload_model: TokenModel,
     address: Address,
-    subject: str,
-    primer: str,
-    primer_ids: tuple[int, ...],
+    private_key: x25519.X25519PrivateKey,
     *,
-    finish_tokens: int = DEFAULT_FINISH_TOKENS,
+    prefix_tokens: int = DEFAULT_PREFIX_TOKENS,
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
-) -> bytes:
-    resolver = StreamLengthResolver(address, subject, primer)
+    on_token: Callable[[CarrierDecodeProgress], None] | None = None,
+) -> DecodedMessage:
+    def body_length(metadata_capsule: bytes, prefix: tuple[int, ...]) -> int:
+        metadata = decrypt_metadata(address, private_key, metadata_capsule, prefix)
+        return metadata.body_bytes
 
-    def validate(stream: bytes) -> None:
-        unpack_stream(address, stream, subject, primer)
-
-    return decode_carrier_stream(
+    decoded = decode_carrier_sections(
         canonical_carrier(carrier),
-        model,
-        length_resolver=resolver.resolve,
-        final_validator=validate,
-        initial_token_ids=primer_ids,
-        finish_tokens=finish_tokens,
+        payload_model,
+        prefix_tokens=prefix_tokens,
+        metadata_bytes=METADATA_CAPSULE_BYTES,
+        body_length_resolver=body_length,
         maximum_characters=maximum_characters,
+        on_token=on_token,
     )
+    message_id, secret = decrypt_message(
+        address,
+        private_key,
+        EncryptedPacket(decoded.metadata, decoded.body),
+        decoded.prefix_token_ids,
+    )
+    return DecodedMessage(message_id, secret, decoded)

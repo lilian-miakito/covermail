@@ -55,9 +55,29 @@ class TokenModel(TokenizerModel, Protocol):
 
 
 class LogitModel(TokenizerModel, Protocol):
-    def next_logits(self, context_ids: Sequence[int]) -> Sequence[float]: ...
+    def ranked_logits(
+        self, context_ids: Sequence[int], limit: int
+    ) -> Sequence[tuple[int, float]]: ...
 
     def special_token_ids(self) -> set[int]: ...
+
+
+class GreedyLogitModel(LogitModel, Protocol):
+    def ranked_logits_including_specials(
+        self, context_ids: Sequence[int], limit: int
+    ) -> Sequence[tuple[int, float]]: ...
+
+    def eos_token_ids(self) -> set[int]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class GreedyToken:
+    token_id: int
+    text: str
+
+
+class GreedyTokenModel(TokenizerModel, Protocol):
+    def next_greedy_token(self, visible_prefix: Sequence[int]) -> GreedyToken | None: ...
 
 
 def is_copy_safe(model: TokenizerModel, visible_prefix: Sequence[int], token_id: int) -> bool:
@@ -102,13 +122,13 @@ def is_visible_token(token_text: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class CandidateConfig:
-    top_n: int
+    top_k: int
     candidate_pool_multiplier: int
     temperature_milli: int
 
     def __post_init__(self) -> None:
-        requested = self.top_n * self.candidate_pool_multiplier
-        if self.top_n < 2 or requested > MAX_MODEL_CANDIDATES:
+        requested = self.top_k * self.candidate_pool_multiplier
+        if self.top_k < 2 or requested > MAX_MODEL_CANDIDATES:
             raise ValueError("candidate pool size outside protocol range")
         if not 1 <= self.candidate_pool_multiplier <= 16:
             raise ValueError("candidate pool multiplier outside protocol range")
@@ -123,27 +143,33 @@ def build_candidate_table(
     config: CandidateConfig,
 ) -> CandidateTable:
     """Build one exact candidate and frequency table from full logits."""
-    logits = model.next_logits(context_ids)
+    requested = config.top_k * config.candidate_pool_multiplier
+    logits = model.ranked_logits(context_ids, requested)
     specials = model.special_token_ids()
     ranked: list[tuple[int, int, float]] = []
-    for token_id, value in enumerate(logits):
-        if token_id in specials:
-            continue
+    seen: set[int] = set()
+    for token_id, value in logits:
+        if token_id < 0 or token_id in seen or token_id in specials:
+            raise CarrierGenerationError("model returned invalid ranked token IDs")
+        seen.add(token_id)
         try:
             finite32 = _float32(value)
             raw_score = quantize_logit(finite32)
         except ValueError as error:
             raise CarrierGenerationError("model returned a non-finite float32 logit") from error
         ranked.append((-raw_score, token_id, finite32))
+    if len(ranked) != requested:
+        raise CarrierGenerationError("model returned the wrong ranked-logit count")
     ranked.sort(key=lambda item: (item[0], item[1]))
-    requested = config.top_n * config.candidate_pool_multiplier
 
     candidates: list[Candidate] = []
-    for _, token_id, logit in ranked[:requested]:
+    visible_text = model.detokenize(visible_prefix)
+    for _, token_id, logit in ranked:
         token_text = model.detokenize([token_id])
         if not is_visible_token(token_text):
             continue
-        if not is_copy_safe(model, visible_prefix, token_id):
+        expected = [*visible_prefix, token_id]
+        if model.tokenize(visible_text + token_text) != expected:
             continue
         candidates.append(
             Candidate(
@@ -152,14 +178,15 @@ def build_candidate_table(
                 adjusted_score=adjusted_score(logit),
             )
         )
+        if len(candidates) == config.top_k:
+            break
 
-    candidates.sort(key=lambda candidate: (-candidate.adjusted_score, candidate.token_id))
-    selected = candidates[: config.top_n]
-    if len(selected) != config.top_n:
+    if len(candidates) != config.top_k:
         raise CarrierGenerationError("model produced too few copy-safe visible candidates")
-    scores = [candidate.adjusted_score for candidate in selected]
-    counts = frequency_counts(deterministic_weights(scores, config.temperature_milli))
-    return CandidateTable(tuple(selected), tuple(cumulative_counts(counts)))
+    scores = [candidate.adjusted_score for candidate in candidates]
+    weights = deterministic_weights(scores, config.temperature_milli)
+    counts = frequency_counts(weights)
+    return CandidateTable(tuple(candidates), tuple(cumulative_counts(counts)))
 
 
 class PromptedLanguageModel:
@@ -167,13 +194,18 @@ class PromptedLanguageModel:
 
     def __init__(
         self,
-        adapter: LogitModel,
+        adapter: GreedyLogitModel,
         prompt_ids: Sequence[int],
         config: CandidateConfig,
+        *,
+        context_token_limit: int | None = None,
     ) -> None:
+        if context_token_limit is not None and context_token_limit <= 0:
+            raise ValueError("context token limit must be positive")
         self.adapter = adapter
         self.prompt_ids = tuple(prompt_ids)
         self.config = config
+        self.context_token_limit = context_token_limit
 
     def tokenize(self, text: str) -> list[int]:
         return self.adapter.tokenize(text)
@@ -184,3 +216,24 @@ class PromptedLanguageModel:
     def next_table(self, visible_prefix: Sequence[int]) -> CandidateTable:
         context = (*self.prompt_ids, *visible_prefix)
         return build_candidate_table(self.adapter, context, visible_prefix, self.config)
+
+    def next_greedy_token(self, visible_prefix: Sequence[int]) -> GreedyToken | None:
+        context_prefix = visible_prefix
+        if self.context_token_limit is not None:
+            context_prefix = visible_prefix[-self.context_token_limit :]
+        context = (*self.prompt_ids, *context_prefix)
+        requested = self.config.top_k * self.config.candidate_pool_multiplier
+        ranked = self.adapter.ranked_logits_including_specials(context, requested)
+        if len(ranked) != requested:
+            raise CarrierGenerationError("model returned the wrong greedy-logit count")
+        eos_ids = self.adapter.eos_token_ids()
+        special_ids = self.adapter.special_token_ids()
+        for token_id, _ in ranked:
+            if token_id in eos_ids:
+                return None
+            if token_id in special_ids:
+                continue
+            text = self.adapter.detokenize([token_id])
+            if is_visible_token(text) and is_copy_safe(self.adapter, visible_prefix, token_id):
+                return GreedyToken(token_id, text)
+        raise CarrierGenerationError("model produced no copy-safe greedy finish token")

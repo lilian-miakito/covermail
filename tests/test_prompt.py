@@ -3,11 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from covermail.cover.prompt import (
-    LLAMA_3_PINNED_DATE,
-    logical_messages,
-    render_chat_prompt,
-)
+from covermail.cover.prompt import logical_messages, render_chat_prompt
 
 
 class RecordingTokenizer:
@@ -20,13 +16,13 @@ class RecordingTokenizer:
         *,
         tokenize: bool,
         add_generation_prompt: bool,
-        date_string: str,
+        enable_thinking: bool,
     ) -> str:
         self.call = {
             "conversation": conversation,
             "tokenize": tokenize,
             "add_generation_prompt": add_generation_prompt,
-            "date_string": date_string,
+            "enable_thinking": enable_thinking,
         }
         return "rendered"
 
@@ -42,37 +38,33 @@ def _cover() -> dict[str, object]:
     }
 
 
-def test_logical_messages_use_json_literals_and_separate_control_tokens() -> None:
-    primer = "Je voulais donner quelques nouvelles calmement."
-    messages = logical_messages(_cover(), '  Café "bleu"  ', primer)
+def test_prefix_prompt_contains_only_the_sender_writing_brief() -> None:
+    messages = logical_messages(_cover(), "prefix", writing_brief='Parle du café "bleu".')
     assert messages[0]["role"] == "system"
-    assert 'in "fr-FR"' in messages[0]["content"]
-    assert "< |contrôle| >" in messages[0]["content"]
-    assert messages[1] == {
-        "role": "user",
-        "content": (
-            'Visible email subject: "Café \\"bleu\\""\n'
-            f'Exact first sentence already written: "{primer}"\n'
-            "Continue immediately after that sentence."
-        ),
-    }
+    assert "begin the email immediately" in messages[0]["content"]
+    assert "at least 1,200 words" in messages[0]["content"]
+    assert 'Parle du café \\"bleu\\".' in messages[1]["content"]
+    assert "subject" not in " ".join(message["content"].lower() for message in messages)
 
 
-def test_render_chat_prompt_pins_date_and_generation_mode() -> None:
+def test_payload_prompt_is_fixed_and_continues_observed_a() -> None:
+    messages = logical_messages(_cover(), "payload")
+    assert "supplied assistant draft" in messages[0]["content"]
+    assert "Preserve its people, topic" in messages[0]["content"]
+    assert "at least 1,200 words" in messages[0]["content"]
+    assert "do not conclude" in messages[0]["content"]
+    assert "separate finishing instruction" in messages[0]["content"]
+
+
+def test_finish_prompt_is_short_but_not_a_decoder_rule() -> None:
+    messages = logical_messages(_cover(), "finish")
+    assert "finish the email very quickly" in messages[0]["content"]
+    assert "Finish the supplied email draft now" in messages[1]["content"]
+
+
+def test_render_disables_thinking_and_enables_generation() -> None:
     tokenizer = RecordingTokenizer()
-    assert render_chat_prompt(tokenizer, _cover(), "Sujet", "Une phrase simple.") == "rendered"
-    assert tokenizer.call["date_string"] == LLAMA_3_PINNED_DATE
+    assert render_chat_prompt(tokenizer, _cover(), "payload") == "rendered"
+    assert tokenizer.call["enable_thinking"] is False
     assert tokenizer.call["tokenize"] is False
     assert tokenizer.call["add_generation_prompt"] is True
-
-
-def test_prompt_declares_exact_primer_without_a_sentence_limit() -> None:
-    primer = "Je voulais te raconter calmement ce qui s'est passé."
-    messages = logical_messages(_cover(), "Le jardin", primer)
-    assert primer in messages[1]["content"]
-    assert "as long as needed" in messages[0]["content"]
-    assert "at most" not in messages[0]["content"]
-    assert "natural paragraphs and line breaks" in messages[0]["content"]
-    tokenizer = RecordingTokenizer()
-    assert render_chat_prompt(tokenizer, _cover(), "Le jardin", primer) == "rendered"
-    assert tokenizer.call["date_string"] == LLAMA_3_PINNED_DATE

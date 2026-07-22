@@ -41,9 +41,7 @@ class ArithmeticSymbolDecoder:
             raise RuntimeError("arithmetic symbol outside table")
 
         old_low = self.low
-        self.high = (
-            old_low + range_size * cumulative[symbol + 1] // FREQUENCY_TOTAL - 1
-        )
+        self.high = old_low + range_size * cumulative[symbol + 1] // FREQUENCY_TOTAL - 1
         self.low = old_low + range_size * cumulative[symbol] // FREQUENCY_TOTAL
 
         while True:
@@ -87,9 +85,7 @@ class ArithmeticBitEncoder:
             raise ValueError("invalid arithmetic symbol")
         range_size = self.high - self.low + 1
         old_low = self.low
-        self.high = (
-            old_low + range_size * cumulative[symbol + 1] // FREQUENCY_TOTAL - 1
-        )
+        self.high = old_low + range_size * cumulative[symbol + 1] // FREQUENCY_TOTAL - 1
         self.low = old_low + range_size * cumulative[symbol] // FREQUENCY_TOTAL
 
         while True:

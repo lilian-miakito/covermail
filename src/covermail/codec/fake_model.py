@@ -5,7 +5,7 @@ from __future__ import annotations
 import string
 from collections.abc import Iterable, Mapping, Sequence
 
-from covermail.codec.candidates import Candidate, CandidateTable, is_copy_safe
+from covermail.codec.candidates import Candidate, CandidateTable, GreedyToken, is_copy_safe
 from covermail.codec.frequencies import (
     FREQUENCY_TOTAL,
     cumulative_counts,
@@ -24,6 +24,7 @@ _VISIBLE_CHARACTERS = tuple(
         + ".!?"
     )
 )
+_FAKE_CLOSING = "\n\namicalement."
 
 
 class FakeLanguageModel:
@@ -142,3 +143,15 @@ class FakeLanguageModel:
             scores = [candidate.adjusted_score for candidate in candidates]
             counts = frequency_counts(deterministic_weights(scores, self.temperature_milli))
         return CandidateTable(tuple(candidates), tuple(cumulative_counts(counts)))
+
+    def next_greedy_token(self, visible_prefix: Sequence[int]) -> GreedyToken | None:
+        visible = self.detokenize(visible_prefix)
+        matched = 0
+        for length in range(min(len(visible), len(_FAKE_CLOSING)), -1, -1):
+            if visible.endswith(_FAKE_CLOSING[:length]):
+                matched = length
+                break
+        if matched == len(_FAKE_CLOSING):
+            return None
+        token_id = self._single_ids[_FAKE_CLOSING[matched]]
+        return GreedyToken(token_id, self._texts[token_id])

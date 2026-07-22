@@ -1,17 +1,13 @@
-"""Pure prompt construction for qualified chat tokenizers."""
+"""Pure prompt construction for the A/B/C/D Qwen phases."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from typing import Protocol
+from typing import Literal, Protocol
 
-from covermail.cover.transport import canonical_subject
-
-PROMPT_TEMPLATE_ID = "cm-email-continuation"
-# Llama 3's bundled Jinja template otherwise calls strftime_now. This value is
-# part of the adapter profile and makes prompt rendering independent of time.
-LLAMA_3_PINNED_DATE = "26 Jul 2024"
+PROMPT_TEMPLATE_ID = "cm-packet-email"
+PromptPhase = Literal["prefix", "payload", "finish"]
 
 
 class ChatTemplateTokenizer(Protocol):
@@ -21,7 +17,7 @@ class ChatTemplateTokenizer(Protocol):
         *,
         tokenize: bool,
         add_generation_prompt: bool,
-        date_string: str,
+        enable_thinking: bool,
     ) -> str: ...
 
 
@@ -32,13 +28,8 @@ def _safe_json_string(value: object, field: str) -> str:
     return json.dumps(separated, ensure_ascii=False, separators=(",", ":"))
 
 
-def logical_messages(
-    cover: Mapping[str, object], subject: str, primer: str
-) -> list[dict[str, str]]:
-    """Build the continuation prompt; visible length is payload-driven."""
-    from covermail.cover.primer import validate_primer
-
-    required_strings = (
+def _shared_system(cover: Mapping[str, object]) -> str:
+    required = (
         "language",
         "relationship",
         "tone",
@@ -46,44 +37,63 @@ def logical_messages(
         "persona_recipient",
         "standing_context",
     )
-    values = {name: _safe_json_string(cover.get(name), name) for name in required_strings}
-    subject_literal = _safe_json_string(canonical_subject(subject), "subject")
-    primer_literal = _safe_json_string(validate_primer(primer), "primer")
-    system_text = (
-        f"You continue one plausible detailed personal email in {values['language']}. "
+    values = {name: _safe_json_string(cover.get(name), name) for name in required}
+    return (
+        f"Write one plausible personal email in {values['language']}. "
         f"The writer and reader are {values['relationship']}. Tone: {values['tone']}. "
         f"Writer persona: {values['persona_sender']}. Reader persona: "
         f"{values['persona_recipient']}. Shared background: {values['standing_context']}. "
-        "Continue directly after the supplied first sentence. Stay on the visible subject "
-        "and develop it naturally for as long as needed. Do not repeat the first sentence. "
-        "Write only the continuation of the email body. Use natural paragraphs and line "
-        "breaks when useful. Do not use a greeting, signature, list, label, metadata, or "
-        "mention these instructions. "
-        "Never mention hidden data, encryption, prompts, models, senders, recipients, or analysis."
+        "Use natural prose, paragraphs, and line breaks. Do not use labels or metadata and "
+        "never mention hidden data, encryption, prompts, models, or analysis. "
     )
-    user_text = (
-        f"Visible email subject: {subject_literal}\n"
-        f"Exact first sentence already written: {primer_literal}\n"
-        "Continue immediately after that sentence."
-    )
-    return [
-        {"role": "system", "content": system_text},
-        {"role": "user", "content": user_text},
-    ]
+
+
+def logical_messages(
+    cover: Mapping[str, object],
+    phase: PromptPhase,
+    *,
+    writing_brief: str = "",
+) -> list[dict[str, str]]:
+    shared = _shared_system(cover)
+    if phase == "prefix":
+        brief = _safe_json_string(writing_brief, "writing_brief")
+        system = (
+            shared
+            + "Follow the sender's writing brief and begin the email immediately. Set up a long, "
+            "detailed exchange that could naturally continue for at least 1,200 words."
+        )
+        user = f"Sender writing brief: {brief}\nBegin the email from its first visible word."
+    elif phase == "payload":
+        system = (
+            shared
+            + "Continue directly from the supplied assistant draft. Preserve its people, topic, "
+            "voice, and current syntax. Plan for a total email length of at least 1,200 words and "
+            "treat the supplied draft as an early part of that email, even if it sounds locally "
+            "complete. Keep opening coherent new subtopics and add fresh concrete personal "
+            "details. Until a separate finishing instruction arrives, do not conclude, summarize, "
+            "say goodbye, sign, add a postscript, or repeat prior wording."
+        )
+        user = "Continue the supplied email draft naturally."
+    else:
+        system = (
+            shared
+            + "Continue directly from the supplied assistant draft and finish the email very "
+            "quickly with a natural farewell and short signature."
+        )
+        user = "Finish the supplied email draft now."
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 def render_chat_prompt(
     tokenizer: ChatTemplateTokenizer,
     cover: Mapping[str, object],
-    subject: str,
-    primer: str,
+    phase: PromptPhase,
     *,
-    date_string: str = LLAMA_3_PINNED_DATE,
+    writing_brief: str = "",
 ) -> str:
-    """Render the qualified continuation prompt with the pinned date."""
     return tokenizer.apply_chat_template(
-        logical_messages(cover, subject, primer),
+        logical_messages(cover, phase, writing_brief=writing_brief),
         tokenize=False,
         add_generation_prompt=True,
-        date_string=date_string,
+        enable_thinking=False,
     )

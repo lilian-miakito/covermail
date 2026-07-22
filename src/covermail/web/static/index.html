@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Covermail — application locale</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#home" aria-label="Accueil Covermail">
+        <span class="brand-mark">C</span>
+        <span><strong>Covermail</strong><small>Local · Qwen 3.5</small></span>
+      </a>
+      <div class="local-badge"><span></span> Hors-ligne · cet appareil</div>
+    </header>
+
+    <main>
+      <section class="hero" id="home-view" data-view="home">
+        <p class="eyebrow">Un canal privé dans un message ordinaire</p>
+        <h1>Écrire en clair.<br><em>Transmettre autrement.</em></h1>
+        <p class="lede">Le secret est chiffré localement, puis encodé dans les choix de mots d’un modèle exécuté sur ce Mac. Aucun serveur Covermail.</p>
+        <div class="action-grid">
+          <button class="action-card" data-open="create" type="button">
+            <span class="action-number">01</span><span class="action-icon">＋</span>
+            <strong>Créer mon adresse</strong><small>Générer une identité privée et une adresse publique.</small>
+          </button>
+          <button class="action-card featured" data-open="write" type="button">
+            <span class="action-number">02</span><span class="action-icon">↗</span>
+            <strong>Écrire un message</strong><small>Transformer un secret en e-mail de couverture.</small>
+          </button>
+          <button class="action-card" data-open="read" type="button">
+            <span class="action-number">03</span><span class="action-icon">↓</span>
+            <strong>Lire un message</strong><small>Retrouver le secret avec votre identité privée.</small>
+          </button>
+        </div>
+        <button class="advanced-link" data-open="advanced" type="button">Diagnostic local et modèle →</button>
+      </section>
+
+      <section class="workspace hidden" id="create-view" data-view="create">
+        <div class="workspace-heading"><button class="back" data-open="home" type="button">← Accueil</button><p class="eyebrow">01 · Identité</p><h2>Créer mon adresse Covermail</h2><p>La phrase secrète protège votre clé privée sur ce Mac. L’adresse JSON, elle, est publique.</p></div>
+        <div class="panel-grid">
+          <form class="panel" id="create-form">
+            <label>Nom public<input id="create-label" maxlength="128" value="Alice" required></label>
+            <label>Phrase secrète<input id="create-passphrase" type="password" maxlength="1024" autocomplete="new-password" required></label>
+            <label>Confirmation<input id="create-confirmation" type="password" maxlength="1024" autocomplete="new-password" required></label>
+            <button class="primary" type="submit">Créer l’identité locale</button>
+            <p class="form-status" id="create-status" role="status"></p>
+          </form>
+          <div class="panel result-panel empty" id="create-result">
+            <p class="panel-kicker">Adresse publique</p>
+            <h3 id="created-label">Pas encore créée</h3>
+            <div class="fingerprint" id="created-fingerprint">L’empreinte apparaîtra ici.</div>
+            <textarea id="created-address" rows="12" readonly aria-label="Adresse publique JSON"></textarea>
+            <div class="button-row"><button type="button" data-copy="created-address">Copier le JSON</button><button type="button" id="download-address">Télécharger</button></div>
+            <p class="warning">Ne partagez jamais le dossier d’identité privée. Seul ce JSON public doit circuler.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace hidden" id="write-view" data-view="write">
+        <div class="workspace-heading"><button class="back" data-open="home" type="button">← Accueil</button><p class="eyebrow">02 · Bob écrit</p><h2>Composer un Covermail</h2><p>Vérifiez d’abord l’empreinte reçue par un autre canal.</p></div>
+        <div class="write-layout">
+          <form class="panel" id="write-form">
+            <div class="section-label"><span>1</span> Destinataire</div>
+            <label>Adresse publique JSON<textarea id="write-address" rows="6" required></textarea></label>
+            <div class="button-row"><label class="file-button">Importer un fichier<input id="write-address-file" type="file" accept="application/json,.json"></label><button type="button" id="inspect-address">Inspecter</button></div>
+            <div class="recipient-card hidden" id="recipient-card"><strong id="recipient-label"></strong><small id="recipient-meta"></small><code id="recipient-fingerprint"></code><label class="check"><input id="fingerprint-confirmed" type="checkbox"> J’ai vérifié cette empreinte.</label></div>
+            <div class="section-label"><span>2</span> Brief de couverture</div>
+            <label>Instructions pour le début visible<textarea id="write-prompt" rows="4" maxlength="4096" required>Écris à un ami proche pour lui donner des nouvelles concrètes du jardin, sur un ton calme et naturel.</textarea></label>
+            <div class="section-label"><span>3</span> Message secret</div>
+            <label>Contenu confidentiel<textarea id="write-secret" rows="7" maxlength="65535" placeholder="Ce texte ne sera jamais envoyé au modèle." required></textarea></label>
+            <div class="budget" id="budget"><span><b id="budget-plain">0</b> octets secrets</span><span><b id="budget-compressed">—</b> octets utiles après compression</span><span><b id="budget-hpke">96</b> octets HPKE</span><span><b id="budget-stream">—</b> octets B+C</span><span><b id="budget-tokens">—</b> tokens estimés</span><span><b id="budget-chars">—</b> caractères estimés</span></div>
+            <label class="check"><input id="live-preview" type="checkbox" checked> Afficher les tokens au fil de la génération.</label>
+            <button class="primary" type="submit">Chiffrer et générer</button>
+            <p class="form-status" id="write-status" role="status"></p>
+          </form>
+          <div class="panel output-panel test-console">
+            <div class="output-head"><div><p class="panel-kicker">Vue protocole</p><h3>Tokens A / B / C / D</h3></div><span class="state-pill" id="encode-state">En attente</span></div>
+            <div class="progress"><span id="encode-progress"></span></div>
+            <div class="protocol-legend" aria-label="Légende des sections">
+              <span class="legend-a"><b>A</b> préfixe libre</span>
+              <span class="legend-b"><b>B</b> métadonnées</span>
+              <span class="legend-c"><b>C</b> ciphertext</span>
+              <span class="legend-d"><b>D</b> fin ignorée</span>
+            </div>
+            <div class="carrier-visual empty" id="carrier-visual" aria-live="polite"><span class="visual-placeholder">Les tokens choisis par Qwen apparaîtront ici avec leur section…</span></div>
+            <div class="token-inspector" id="token-inspector">Cliquez sur un token pour inspecter son ID et les bits confirmés.</div>
+            <div class="section-metrics">
+              <span class="section-a"><b id="tokens-a">0</b>A</span>
+              <span class="section-b"><b id="tokens-b">0</b>B</span>
+              <span class="section-bc"><b id="tokens-bc">0</b>B↔C</span>
+              <span class="section-c"><b id="tokens-c">0</b>C</span>
+              <span class="section-d"><b id="tokens-d">0</b>D</span>
+            </div>
+            <div class="metric-strip"><span><b id="metric-tokens">—</b> tokens</span><span><b id="metric-speed">—</b> tok/s</span><span><b id="metric-k">—</b> K_all</span></div>
+            <details class="raw-carrier"><summary>Carrier brut exact</summary><textarea id="carrier-output" rows="10" readonly></textarea></details>
+            <div class="button-row"><button class="primary small" type="button" data-copy="carrier-output">Copier le carrier exact</button></div>
+            <p class="hint">La coloration est une vue de diagnostic. Seul le carrier brut doit être copié. D est hors décodage ; A, B et C doivent rester strictement inchangés.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace hidden" id="read-view" data-view="read">
+        <div class="workspace-heading"><button class="back" data-open="home" type="button">← Accueil</button><p class="eyebrow">03 · Alice lit</p><h2>Décoder un Covermail</h2><p>Les 64 premiers tokens amorcent le modèle, puis la capsule de métadonnées révèle la taille du message chiffré.</p></div>
+        <div class="panel-grid">
+          <form class="panel" id="read-form">
+            <label>Identité locale<select id="read-identity" required><option value="">Choisir…</option></select></label>
+            <label>Corps exact<textarea id="read-carrier" rows="13" maxlength="200000" required></textarea></label>
+            <label>Phrase secrète de l’identité<input id="read-passphrase" type="password" maxlength="1024" autocomplete="current-password" required></label>
+            <button class="primary" type="submit">Décoder localement</button>
+            <p class="form-status" id="read-status" role="status"></p>
+          </form>
+          <div class="panel output-panel">
+            <div class="output-head"><div><p class="panel-kicker">Message retrouvé</p><h3>Contenu confidentiel</h3></div><span class="state-pill" id="decode-state">En attente</span></div>
+            <div class="progress"><span id="decode-progress"></span></div>
+            <textarea id="secret-output" class="secret-output" rows="18" readonly placeholder="Le message authentifié apparaîtra ici."></textarea>
+            <div class="button-row"><button type="button" data-copy="secret-output">Copier</button><button type="button" id="clear-secret">Effacer</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace hidden" id="advanced-view" data-view="advanced">
+        <div class="workspace-heading"><button class="back" data-open="home" type="button">← Accueil</button><p class="eyebrow">Diagnostic</p><h2>État du système local</h2></div>
+        <div class="diagnostic-grid"><article class="panel"><p class="panel-kicker">Service</p><h3 id="diag-service">Vérification…</h3><pre id="diag-health"></pre></article><article class="panel"><p class="panel-kicker">Modèle</p><h3 id="diag-model">Vérification…</h3><pre id="diag-model-data"></pre></article></div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

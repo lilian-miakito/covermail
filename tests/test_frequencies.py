@@ -21,9 +21,7 @@ def test_largest_remainder_ties_follow_candidate_order() -> None:
     assert frequency_counts([1, 1, 1], total=8) == [3, 3, 2]
 
 
-@given(
-    st.lists(st.integers(min_value=1, max_value=1 << 40), min_size=2, max_size=128)
-)
+@given(st.lists(st.integers(min_value=1, max_value=1 << 40), min_size=2, max_size=128))
 def test_frequency_normalization_property(weights: list[int]) -> None:
     counts = frequency_counts(weights)
     cumulative = cumulative_counts(counts)

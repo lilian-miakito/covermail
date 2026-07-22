@@ -48,14 +48,14 @@ def address(private_key: x25519.X25519PrivateKey) -> dict[str, Any]:
         },
         "codec": {
             "id": "cm-arithmetic",
-            "top_n": 4,
+            "top_k": 4,
             "candidate_pool_multiplier": 2,
             "frequency_total": 32768,
             "logit_scale": 1024,
             "temperature_milli": 1000,
-            "finish_tokens": 32,
+            "prefix_tokens": 64,
             "visible_filter": "cm-visible-email",
-            "prompt_template": "cm-email-continuation",
+            "prompt_template": "cm-packet-email",
             "self_test": {
                 "steps": 4,
                 "path_indices": [0, 1, 3, 0],

@@ -21,12 +21,12 @@ from covermail.errors import AddressValidationError
 def test_valid_address_and_fixed_fingerprint(address: dict[str, Any]) -> None:
     validated = validate_address(address)
     assert address_digest(validated).hex() == (
-        "3fb5c2670e2dae673cec33d7b0b0e2471d9e8390e8f40e905216523b48f06360"
+        "35b29ea279e33ebd0e4b70fdd43cec6ba17c6856dff62fa9488fa5ac95c32d9c"
     )
-    assert address_id(validated).hex() == "3fb5c2670e2dae673cec33d7b0b0e247"
-    assert machine_address_id(validated) == "P7XCZw4trmc87DPXsLDiRw"
+    assert address_id(validated).hex() == "35b29ea279e33ebd0e4b70fdd43cec6b"
+    assert machine_address_id(validated) == "NbKeonnjPr0OS3D91Dzsaw"
     assert human_fingerprint(validated) == (
-        "H624 EZYO FWXG OPHM GPL3 BMHC I4OZ 5A4Q 5D2A 5ECS CZJD WSHQ MNQA"
+        "GWZJ 5ITZ 4M7L 2DSL OD65 IPHM NOQX Y2CW 373C 7KKI R6S2 ZFOD FWOA"
     )
 
 
@@ -43,7 +43,7 @@ def test_valid_address_and_fixed_fingerprint(address: dict[str, Any]) -> None:
         (("model", "artifacts", 0, "path"), "../weights.bin"),
         (("model", "artifacts", 0, "path"), "weights.pt"),
         (("model", "runtime", "trust_remote_code"), True),
-        (("codec", "top_n"), 1),
+        (("codec", "top_k"), 1),
         (("codec", "frequency_total"), 65536),
         (("codec", "self_test", "path_indices"), [0, 1, 2, 0]),
         (("cover", "language"), "not a tag"),

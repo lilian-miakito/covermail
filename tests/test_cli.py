@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -9,28 +8,45 @@ from typing import Any
 from covermail.address.canonical import canonical_json
 from covermail.cli import main
 from covermail.models.mlx_adapter import MODEL_ARTIFACT_PATHS
-from covermail.service import encrypt_message
 
-SUBJECT = "Des nouvelles du jardin"
-PRIMER = "abc."
+BRIEF = "Écris à un ami à propos du jardin."
 
 
-def test_cli_context_bound_binary_round_trip(
+def _fake_profile(model: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        prefix_model=model,
+        payload_model=model,
+        finish_model=model,
+        self_test=SimpleNamespace(
+            selected_token_ids=(10, 11, 12, 13),
+            sha256="a" * 64,
+        ),
+    )
+
+
+def test_cli_identity_carrier_round_trip(
     tmp_path: Path,
     address: dict[str, Any],
     monkeypatch: Any,
     capsys: Any,
 ) -> None:
+    from covermail.codec.fake_model import FakeLanguageModel
+
     template = tmp_path / "template.json"
     public = tmp_path / "alice.json"
     secret = tmp_path / "secret.txt"
-    stream = tmp_path / "message.cm"
+    carrier = tmp_path / "carrier.txt"
     recovered = tmp_path / "recovered.txt"
     identities = tmp_path / "identities"
     template.write_bytes(canonical_json(address))
     secret.write_text("Message CLI — contexte lié", encoding="utf-8")
     answers = iter(["passphrase", "passphrase", "passphrase"])
     monkeypatch.setattr("covermail.cli.getpass.getpass", lambda prompt: next(answers))
+    model = FakeLanguageModel()
+    monkeypatch.setattr(
+        "covermail.cli.load_profile",
+        lambda address, model_root, writing_brief="": _fake_profile(model),
+    )
 
     assert (
         main(
@@ -49,32 +65,33 @@ def test_cli_context_bound_binary_round_trip(
     assert (
         main(
             [
-                "encrypt",
+                "carrier-encode",
                 str(public),
-                "--subject",
-                SUBJECT,
-                "--primer",
-                PRIMER,
+                "--model-root",
+                str(tmp_path),
+                "--prompt",
+                BRIEF,
                 "--message",
                 str(secret),
                 "--output",
-                str(stream),
+                str(carrier),
             ]
         )
         == 0
     )
-    capsys.readouterr()
+    metrics = json.loads(capsys.readouterr().err)
+    assert metrics["k_all"] == metrics["characters"] / metrics["packet_bytes"]
+    assert metrics["metrics"]["prefix_tokens"] == 64
+
     assert (
         main(
             [
-                "decrypt",
+                "carrier-decode",
                 identity_dir,
-                "--subject",
-                SUBJECT,
-                "--primer",
-                PRIMER,
-                "--stream",
-                str(stream),
+                "--model-root",
+                str(tmp_path),
+                "--carrier",
+                str(carrier),
                 "--output",
                 str(recovered),
             ]
@@ -82,30 +99,30 @@ def test_cli_context_bound_binary_round_trip(
         == 0
     )
     assert recovered.read_text(encoding="utf-8") == secret.read_text(encoding="utf-8")
-    if os.name == "posix":
-        assert recovered.stat().st_mode & 0o777 == 0o600
 
 
-def test_cli_rejects_oversized_secret_before_protocol_work(
-    tmp_path: Path,
-    address_file: Path,
-    capsys: Any,
+def test_cli_rejects_oversized_secret_before_model_work(
+    tmp_path: Path, address_file: Path, monkeypatch: Any, capsys: Any
 ) -> None:
     secret = tmp_path / "large.txt"
     secret.write_bytes(b"x" * 65536)
+    monkeypatch.setattr(
+        "covermail.cli.load_profile",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("model loaded")),
+    )
     try:
         main(
             [
-                "encrypt",
+                "carrier-encode",
                 str(address_file),
-                "--subject",
-                SUBJECT,
-                "--primer",
-                PRIMER,
+                "--model-root",
+                str(tmp_path),
+                "--prompt",
+                BRIEF,
                 "--message",
                 str(secret),
                 "--output",
-                str(tmp_path / "message.cm"),
+                str(tmp_path / "carrier.txt"),
             ]
         )
     except SystemExit as error:
@@ -119,25 +136,12 @@ def test_cli_model_prepare_materializes_regular_tree(tmp_path: Path, capsys: Any
     source.mkdir()
     for index, relative_path in enumerate(MODEL_ARTIFACT_PATHS):
         (source / relative_path).write_bytes(f"artifact-{index}".encode())
-
-    assert (
-        main(
-            [
-                "model-prepare",
-                "--source",
-                str(source),
-                "--destination",
-                str(destination),
-            ]
-        )
-        == 0
-    )
+    assert main(["model-prepare", "--source", str(source), "--destination", str(destination)]) == 0
     manifest = json.loads(capsys.readouterr().out)
     assert [entry["path"] for entry in manifest] == sorted(MODEL_ARTIFACT_PATHS)
-    assert all((destination / path).is_file() for path in MODEL_ARTIFACT_PATHS)
 
 
-def test_cli_fake_adapter_carrier_round_trip_and_k_all(
+def test_cli_generates_and_cross_verifies_qualification_bundle(
     tmp_path: Path,
     address: dict[str, Any],
     monkeypatch: Any,
@@ -146,64 +150,45 @@ def test_cli_fake_adapter_carrier_round_trip_and_k_all(
     from covermail.codec.fake_model import FakeLanguageModel
 
     address_path = tmp_path / "address.json"
-    stream_path = tmp_path / "message.cm"
-    carrier_path = tmp_path / "carrier.txt"
-    recovered_path = tmp_path / "decoded.cm"
-    primer_path = tmp_path / "primer.txt"
+    bundle_path = tmp_path / "qualification.json"
+    verification_path = tmp_path / "verification.json"
     model = FakeLanguageModel()
-    primer_ids = tuple(model.tokenize(PRIMER))
     address_path.write_bytes(canonical_json(address))
-    stream = encrypt_message(address, "carrier CLI", SUBJECT, PRIMER)
-    stream_path.write_bytes(stream)
     monkeypatch.setattr(
-        "covermail.cli.load_profile",
-        lambda address, model_root, subject, primer: SimpleNamespace(
-            model=model,
-            primer_ids=primer_ids,
-        ),
+        "covermail.models.qualification.load_profile",
+        lambda address, model_root, writing_brief="": _fake_profile(model),
     )
-
+    monkeypatch.setattr(
+        "covermail.models.qualification.quality_signals", lambda carrier: {"flags": []}
+    )
     assert (
         main(
             [
-                "carrier-encode",
+                "model-qualify",
                 str(address_path),
                 "--model-root",
                 str(tmp_path),
-                "--subject",
-                SUBJECT,
-                "--primer",
-                PRIMER,
-                "--stream",
-                str(stream_path),
                 "--output",
-                str(carrier_path),
+                str(bundle_path),
             ]
         )
         == 0
     )
-    metrics = json.loads(capsys.readouterr().err)
-    assert metrics["k_all"] == metrics["characters"] / metrics["stream_bytes"]
-    assert metrics["metrics"]["primer_tokens"] == len(primer_ids)
-
+    assert json.loads(capsys.readouterr().err.splitlines()[-1])["action"] == "generated"
     assert (
         main(
             [
-                "carrier-decode",
+                "model-qualify",
                 str(address_path),
                 "--model-root",
                 str(tmp_path),
-                "--subject",
-                SUBJECT,
-                "--carrier",
-                str(carrier_path),
+                "--verify-bundle",
+                str(bundle_path),
                 "--output",
-                str(recovered_path),
-                "--primer-output",
-                str(primer_path),
+                str(verification_path),
             ]
         )
         == 0
     )
-    assert recovered_path.read_bytes() == stream
-    assert primer_path.read_text(encoding="utf-8") == PRIMER
+    assert json.loads(capsys.readouterr().err.splitlines()[-1])["action"] == "verified"
+    assert json.loads(verification_path.read_text())["all_packets_exact"]

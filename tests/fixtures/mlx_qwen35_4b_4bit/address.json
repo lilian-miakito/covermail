@@ -1,25 +1,25 @@
 {
   "codec": {
     "candidate_pool_multiplier": 8,
-    "finish_tokens": 32,
+    "prefix_tokens": 64,
     "frequency_total": 32768,
     "id": "cm-arithmetic",
     "logit_scale": 1024,
-    "prompt_template": "cm-email-continuation",
+    "prompt_template": "cm-packet-email",
     "self_test": {
-      "expected_sha256": "696baa21246bef6026ae86fce59e7f8b4116a74f525db56b8e137e98b6e9bf13",
-      "path_indices": [0, 1, 63, 0],
+      "expected_sha256": "061e0f5d86d5d62ce4e62c3b0df65af8664915197bce4f9c334678dccee1bb52",
+      "path_indices": [0, 1, 19, 0],
       "steps": 4
     },
     "temperature_milli": 1000,
-    "top_n": 64,
+    "top_k": 20,
     "visible_filter": "cm-visible-email"
   },
   "cover": {
     "language": "fr-FR",
     "max_visible_characters": 20000,
     "persona_recipient": "un ami de longue date",
-    "persona_sender": "une personne ordinaire écrivant un bref email",
+    "persona_sender": "une personne ordinaire écrivant un email personnel détaillé",
     "relationship": "deux amis proches",
     "standing_context": "Ils échangent occasionnellement des nouvelles du quotidien.",
     "tone": "familier, calme et naturel"
@@ -34,39 +34,39 @@
   "model": {
     "artifacts": [
       {
+        "path": "chat_template.jinja",
+        "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+        "size": 7756
+      },
+      {
         "path": "config.json",
-        "sha256": "c546925585e48f43890d9dc5150df4fec73dd3780d92961c5ace451934cc4cd6",
-        "size": 1122
+        "sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa",
+        "size": 3366
       },
       {
         "path": "model.safetensors",
-        "sha256": "d75e1ee0ea653cc5b76191ec934c7c0d568e94d4e47846619f1f4bc715b7b265",
-        "size": 1807496278
+        "sha256": "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db",
+        "size": 3034300695
       },
       {
         "path": "model.safetensors.index.json",
-        "sha256": "2ef31fa0b9dcda01f87835851d5e1d5a39ab6258ae618af6ea864c3747e556e4",
-        "size": 45720
-      },
-      {
-        "path": "special_tokens_map.json",
-        "sha256": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
-        "size": 296
+        "sha256": "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a",
+        "size": 101944
       },
       {
         "path": "tokenizer.json",
-        "sha256": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
-        "size": 17209920
+        "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
+        "size": 19989343
       },
       {
         "path": "tokenizer_config.json",
-        "sha256": "022d5ae3df4737998ab97d8f31ac2bcb4c06dd8ebe5a8aba2b4aceef1e5ea7d3",
-        "size": 54558
+        "sha256": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
+        "size": 1139
       }
     ],
     "backend": "mlx-lm",
-    "model_id": "mlx-community/Llama-3.2-3B-Instruct-4bit",
-    "revision": "7f0dc925e0d0afb0322d96f9255cfddf2ba5636e",
+    "model_id": "mlx-community/Qwen3.5-4B-4bit",
+    "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
     "runtime": {
       "logits_dtype": "float32",
       "packages": {
@@ -85,7 +85,7 @@
   },
   "recipient": {
     "hpke_public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
-    "label": "Alice Stage 3 fixture"
+    "label": "Alice Qwen local fixture"
   },
   "version": 1
 }

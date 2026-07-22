@@ -9,37 +9,32 @@ from cryptography.hazmat.primitives.hpke import AEAD, KDF, KEM, Suite
 from covermail.address.canonical import decode_base64url
 from covermail.address.fingerprint import address_digest
 from covermail.address.schema import Address
-from covermail.cover.primer import validate_primer
-from covermail.cover.transport import canonical_subject
 from covermail.errors import DecryptionError
-from covermail.protocol.outer_frame import outer_header
 
-HPKE_INFO_LABEL = b"covermail/hpke\x00"
-VISIBLE_CONTEXT_LABEL = b"covermail/visible-context\x00"
+HPKE_INFO_LABEL = b"covermail/hpke-packet\x00"
+PREFIX_CONTEXT_LABEL = b"covermail/prefix-context\x00"
+METADATA_DOMAIN = b"metadata\x00"
+BODY_DOMAIN = b"body\x00"
 HPKE_SUITE = Suite(KEM.X25519, KDF.HKDF_SHA256, AEAD.AES_128_GCM)
 HPKE_ENCAPSULATED_KEY_BYTES = 32
 HPKE_TAG_BYTES = 16
 
 
-def visible_context_digest(subject: str, primer: str) -> bytes:
-    subject_raw = canonical_subject(subject).encode("utf-8", errors="strict")
-    primer_raw = validate_primer(primer).encode("utf-8", errors="strict")
-    transcript = (
-        VISIBLE_CONTEXT_LABEL
-        + len(subject_raw).to_bytes(2, "big")
-        + subject_raw
-        + len(primer_raw).to_bytes(2, "big")
-        + primer_raw
-    )
+def prefix_context_digest(prefix_token_ids: tuple[int, ...]) -> bytes:
+    transcript = bytearray(PREFIX_CONTEXT_LABEL)
+    transcript.extend(len(prefix_token_ids).to_bytes(2, "big"))
+    for token_id in prefix_token_ids:
+        if not 0 <= token_id <= 0xFFFFFFFF:
+            raise ValueError("prefix token ID is outside uint32 range")
+        transcript.extend(token_id.to_bytes(4, "big"))
     return hashlib.sha256(transcript).digest()
 
 
-def hpke_info(address: Address, subject: str, primer: str) -> bytes:
+def hpke_info(address: Address, prefix_token_ids: tuple[int, ...], domain: bytes) -> bytes:
+    if domain not in {METADATA_DOMAIN, BODY_DOMAIN}:
+        raise ValueError("unknown HPKE packet domain")
     return (
-        HPKE_INFO_LABEL
-        + address_digest(address)
-        + outer_header(address)
-        + visible_context_digest(subject, primer)
+        HPKE_INFO_LABEL + domain + address_digest(address) + prefix_context_digest(prefix_token_ids)
     )
 
 
@@ -51,30 +46,33 @@ def _public_key(address: Address) -> x25519.X25519PublicKey:
     return x25519.X25519PublicKey.from_public_bytes(raw)
 
 
-def encrypt_inner(address: Address, inner: bytes, subject: str, primer: str) -> bytes:
-    """Encrypt and authenticate the exact visible subject and primer."""
+def encrypt_capsule(
+    address: Address,
+    plaintext: bytes,
+    prefix_token_ids: tuple[int, ...],
+    domain: bytes,
+) -> bytes:
     return HPKE_SUITE.encrypt(
-        inner,
+        plaintext,
         _public_key(address),
-        info=hpke_info(address, subject, primer),
+        info=hpke_info(address, prefix_token_ids, domain),
     )
 
 
-def decrypt_inner(
+def decrypt_capsule(
     address: Address,
     private_key: x25519.X25519PrivateKey,
-    hpke_blob: bytes,
-    subject: str,
-    primer: str,
+    capsule: bytes,
+    prefix_token_ids: tuple[int, ...],
+    domain: bytes,
 ) -> bytes:
-    """Authenticate ciphertext and its exact visible context."""
     try:
         return HPKE_SUITE.decrypt(
-            hpke_blob,
+            capsule,
             private_key,
-            info=hpke_info(address, subject, primer),
+            info=hpke_info(address, prefix_token_ids, domain),
         )
     except (InvalidTag, ValueError) as error:
         raise DecryptionError(
-            "not an authentic message for the selected Covermail Address and visible context"
+            "not an authentic packet for the selected Covermail Address and visible prefix"
         ) from error

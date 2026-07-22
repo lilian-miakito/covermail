@@ -82,9 +82,7 @@ def build_artifact_manifest(root: Path, paths: Iterable[str]) -> list[ArtifactRe
     return manifest
 
 
-def verify_artifact_manifest(
-    root: Path, artifacts: Sequence[Mapping[str, object]]
-) -> None:
+def verify_artifact_manifest(root: Path, artifacts: Sequence[Mapping[str, object]]) -> None:
     """Fail closed unless each addressed artifact is the exact regular file."""
     if not artifacts:
         raise ModelProfileError("artifact manifest is empty")
@@ -126,9 +124,10 @@ def materialize_artifact_tree(source: Path, destination: Path, paths: Iterable[s
             try:
                 os.link(source_path, destination_path, follow_symlinks=False)
             except OSError:
-                with source_path.open("rb") as source_stream, destination_path.open(
-                    "xb"
-                ) as destination_stream:
+                with (
+                    source_path.open("rb") as source_stream,
+                    destination_path.open("xb") as destination_stream,
+                ):
                     shutil.copyfileobj(source_stream, destination_stream, _CHUNK_SIZE)
     except FileExistsError as error:
         raise ModelProfileError("qualified artifact destination already exists") from error

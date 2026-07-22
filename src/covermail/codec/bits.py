@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 
 class FramedBitSource:
-    """Real bytes followed by the protocol's infinite alternating 1,0 suffix."""
+    """Real bytes followed by a cached, caller-selected infinite suffix."""
 
-    def __init__(self, data: bytes) -> None:
+    def __init__(
+        self,
+        data: bytes,
+        suffix_bit: Callable[[int], int] | None = None,
+    ) -> None:
         self.data = data
+        self._suffix_bit = suffix_bit or (lambda offset: 1 if offset % 2 == 0 else 0)
+        self._suffix: list[int] = []
 
     @property
     def real_bits(self) -> int:
@@ -19,7 +27,13 @@ class FramedBitSource:
         if offset < self.real_bits:
             byte = self.data[offset // 8]
             return (byte >> (7 - offset % 8)) & 1
-        return 1 if (offset - self.real_bits) % 2 == 0 else 0
+        suffix_offset = offset - self.real_bits
+        while len(self._suffix) <= suffix_offset:
+            bit = self._suffix_bit(len(self._suffix))
+            if bit not in (0, 1):
+                raise ValueError("suffix source returned a non-bit")
+            self._suffix.append(bit)
+        return self._suffix[suffix_offset]
 
 
 class BitCollector:

@@ -1,267 +1,188 @@
 # Covermail protocol
 
-Status: implementation draft. The repository is pre-release and defines one
-active protocol. Historical wire formats and compatibility branches are not
-part of the implementation.
+Status: implementation draft. The repository defines one active WIP protocol;
+there are no historical wire formats or compatibility shims.
 
-## 1. Purpose and boundaries
+## 1. Boundary
 
-Covermail encrypts a UTF-8 message for a recipient, converts the resulting
-pseudorandom byte stream into language-model token choices, and emits the
-detokenized text as an email carrier.
+Covermail encrypts a UTF-8 message and maps the pseudorandom packet bytes to
+language-model token choices. The LLM never encrypts or receives the secret.
+Anyone with the public address, carrier, exact model and runtime can reconstruct
+the encrypted metadata B; the recipient private key is required to learn the
+length of C and decrypt the message.
 
-The LLM does not encrypt the secret. Anyone with the public address, exact
-model profile, subject, and carrier can in principle recover the HPKE
-ciphertext. Only the recipient's private key reveals the plaintext.
+There is no email-subject input in the protocol.
 
-The implementation does not promise resistance to traffic analysis, arbitrary
-carrier edits, model fingerprinting, or a detector trained against its output.
+## 2. Carrier layout
 
-## 2. Public address
-
-An address is strict canonical JSON with these top-level fields:
+The visible carrier has four logical regions:
 
 ```text
-format, version, recipient, hpke, model, codec, cover
+A: 64 observed prefix tokens
+B: fixed 53-byte HPKE metadata capsule
+C: variable HPKE message capsule
+D: optional unverified visible finish
 ```
 
-Unknown and missing fields are rejected. The active codec fields are fixed to:
+B and C form one continuous arithmetic byte stream `B || C`. Their byte
+boundary does not need to coincide with a token boundary.
+
+## 3. Public address
+
+The address is strict canonical JSON. It pins the recipient X25519 public key,
+exact Qwen model revision and artifacts, runtime packages, cover persona,
+candidate construction, arithmetic parameters, prompt `cm-packet-email`, 64
+prefix tokens, and the model self-test. Unknown or missing fields fail closed.
+
+SHA-256 of the canonical JSON is the address digest. Its first 16 bytes are the
+human-independent address ID.
+
+## 4. A — observed generated prefix
+
+The sender supplies an arbitrary local writing brief to the prefix prompt. The
+qualified tokenizer/model samples exactly 64 copy-safe visible tokens. These
+tokens carry no hidden packet bits and are transmitted literally.
+
+The writing brief, sampling seed and sampling policy are not protocol inputs.
+The receiver observes A directly and never reconstructs its generation.
+
+Before encoding B, the sender resets the model context. Both parties then use:
 
 ```text
-id                 = cm-arithmetic
-prompt_template    = cm-email-continuation
-visible_filter     = cm-visible-email
-frequency_total    = 32768
-logit_scale        = 1024
+fixed payload prompt || exact 64 token IDs of A
 ```
 
-The model revision, artifacts, hashes, runtime packages, candidate count,
-temperature, finish limit, self-test, and cover persona are address-bound.
+for the first arithmetic token and extend that same visible prefix thereafter.
+The fixed payload prompt establishes a 1,200-word horizon, treats A as an early
+draft, and defers conclusion, signoff and postscript until the separate D
+finishing prompt. This target is deliberately independent of packet length so
+both parties know it before B is decoded.
 
-The address digest is SHA-256 over canonical address JSON. Its first 16 bytes
-form the address ID embedded in the outer payload.
+## 5. Prefix binding
 
-## 3. Visible context
-
-The visible subject is NFC-normalized, has repeated ASCII spaces/tabs collapsed
-to one space, and is limited to 256 UTF-8 bytes. CR, LF, and NUL are invalid in
-the subject.
-
-The sender supplies an exact first-sentence primer. It must:
-
-- contain 1..512 UTF-8 bytes;
-- have no leading or trailing whitespace;
-- contain no CR, LF, tab, NUL, invalid Unicode, or model-control delimiter;
-- contain exactly one character from `.?!`, at its end;
-- round-trip exactly through the qualified tokenizer.
-
-The carrier is:
+The exact A token IDs are serialized as a uint16 count followed by uint32 token
+IDs and hashed under `covermail/prefix-context\0`. Both HPKE capsules bind:
 
 ```text
-primer || arithmetic continuation || greedy finish
+domain || address_digest || prefix_context_digest
 ```
 
-The primer carries no hidden bits but initializes the model's visible context.
+Changing A therefore changes both the language-model context and HPKE info.
 
-The context digest is SHA-256 over:
+## 6. C — encrypted message capsule
+
+The sender first packs the secret into the authenticated inner frame containing
+a random 16-byte message ID, the original UTF-8 length and either raw or DEFLATE
+body bytes. It encrypts that frame with HPKE Base:
 
 ```text
-"covermail/visible-context\0"
-|| uint16_be(len(subject_utf8)) || subject_utf8
-|| uint16_be(len(primer_utf8))  || primer_utf8
+DHKEM_X25519_HKDF_SHA256 / HKDF_SHA256 / AES_128_GCM
+domain = "body\0"
 ```
 
-## 4. Encryption
+The result C has 48 bytes of HPKE overhead.
 
-The fixed HPKE suite is:
+## 7. B — fixed encrypted metadata capsule
+
+After C exists, the sender constructs the fixed five-byte plaintext:
 
 ```text
-KEM  = DHKEM_X25519_HKDF_SHA256
-KDF  = HKDF_SHA256
-AEAD = AES_128_GCM
-mode = BASE
+uint8 version = 1
+uint32_be len(C)
 ```
 
-The compressed authenticated inner frame contains a random message ID and the
-UTF-8 plaintext. HPKE `info` is:
+It encrypts this independently with the same HPKE suite and domain
+`"metadata\0"`. HPKE adds 48 bytes, so B is always exactly 53 bytes.
 
-```text
-"covermail/hpke\0"
-|| address_digest
-|| outer_header
-|| context_digest
-```
+No visible marker and no fixed token count are used for B.
 
-Thus the exact address, subject, and primer are authenticated.
+## 8. Candidate table and frequencies
 
-## 5. Uniformized stream
+At each B/C position the implementation obtains float32 logits, quantizes
+`round_half_even(logit * 1024)`, excludes special IDs, orders by quantized score
+then token ID, filters the address-bound raw candidate pool for visible and
+complete-prefix copy-safe tokens, and retains the fixed top-k.
 
-Split the HPKE result into the 32-byte encapsulated key `enc` and authenticated
-ciphertext. Construct:
+Deterministic Decimal exponentiation at the address temperature produces
+positive integer frequencies summing to 32768. LF is an ordinary eligible
+visible token. There is no bridge, word blacklist, or fixed bits-per-token rule.
 
-```text
-payload = outer_header || hpke_ciphertext
-tail = uvarint(len(payload)) || payload
-mask = HKDF-SHA256(
-    ikm=enc,
-    salt=address_digest,
-    info="covermail/stego-mask\0" || context_digest,
-    length=len(tail),
-)
-stream = enc || (tail XOR mask)
-```
-
-The mask uniformizes structured bytes; it is public and adds no confidentiality.
-After recovering 32 bytes, the decoder derives the mask, parses the length, and
-knows the exact arithmetic termination target.
-
-## 6. Prompt
-
-Prompt `cm-email-continuation` asks the exact qualified model to continue the
-visible primer on the visible subject for as long as necessary. It requests
-ordinary personal email prose and permits natural paragraphs and LF line
-breaks. The secret and ciphertext are never included in the prompt.
-
-Prompt rendering uses the model's pinned chat template and a fixed date. Prompt
-text, tokenizer, model artifacts, runtime, and logits are covered by the model
-self-test.
-
-## 7. Candidate table
-
-At every continuation position:
-
-1. obtain the complete next-token logit vector;
-2. cast each finite logit to IEEE-754 float32;
-3. quantize `round_half_even(logit * 1024)`;
-4. exclude model special token IDs;
-5. order by quantized logit descending, then token ID ascending;
-6. take the raw top `top_n * candidate_pool_multiplier` tokens;
-7. keep candidates whose text is non-empty, UTF-8 serializable, and contains
-   neither CR nor NUL;
-8. require the complete-prefix copy-safe property;
-9. take the first `top_n` survivors.
-
-The copy-safe property is:
+The copy-safe invariant is:
 
 ```text
 tokenize(detokenize(prefix_ids || [candidate_id]))
     == prefix_ids || [candidate_id]
 ```
 
-It is necessary because the receiver observes text, not the sender's token IDs.
-LF, tabs, spaces, punctuation, markup, and ordinary vocabulary are otherwise
-eligible. There is no word blacklist.
+## 9. Continuous inverse arithmetic stream
 
-## 8. Frequencies
+The sender inverse-decodes `B || C` through the token candidate distributions
+and mirrors the receiver's 32-bit arithmetic encoder. It stops only after every
+real bit of both capsules is confirmed. Beyond the real byte boundary it reads
+a sender-local random virtual suffix. These lookahead bits are not packet data,
+need not be reproduced by the receiver and restore ordinary probabilistic
+sampling after the final real bit has entered the arithmetic decoder.
 
-Let quantized scores be `q_i`, maximum `q_max`, and temperature integer `T` in
-thousandths. Deterministic Decimal arithmetic computes:
-
-```text
-x_i = (q_i - q_max) * 1000 / (1024 * T)
-w_i = max(1, round_half_even(exp(x_i) * 2^24))
-```
-
-Positive integer counts are allocated proportionally by largest remainder and
-sum exactly to 32768. At temperature 1000, the relative candidate probabilities
-approximate the model's selected logits at temperature 1.
-
-Every valid table is used by the arithmetic coder. There is no low-entropy
-special case and no token that advances the model while skipping arithmetic
-state. Highly probable choices may confirm zero bits immediately; their
-fractional information remains in the interval state.
-
-## 9. Inverse arithmetic coding
-
-The coder uses an unsigned 32-bit range with the standard half, quarter, and
-three-quarter renormalization boundaries.
-
-The sender treats the stream bits as the arithmetic code value and repeatedly
-decodes it into candidate indices. The receiver observes those candidate
-indices and runs the matching arithmetic encoder to recover confirmed bits.
-
-Bytes are read most-significant bit first. Beyond the real stream boundary the
-sender exposes the virtual suffix:
+The receiver initially has a 53-byte target. Once the first 424 bits are
+confirmed, it decrypts B, learns `len(C)`, and changes the target to:
 
 ```text
-1, 0, 1, 0, ...
+8 * (53 + len(C))
 ```
 
-The sender runs a mirrored arithmetic encoder beside the symbol decoder and
-stops only after the mirror has confirmed every real stream bit. Any confirmed
-bits beyond the target must match the virtual suffix.
+without resetting arithmetic state. This is a byte boundary inside one stream,
+analogous to framing a packet on TCP; one token may confirm bits on both sides
+of the logical B/C boundary.
 
-There is no fixed number of payload bits per token. A token's sequence-level
-information is approximately `-log2(p)`, and confirmed bits can arrive in
-bursts after several zero-output symbols.
+## 10. D — local finish
 
-## 10. Finishing
+After all B/C bits are confirmed, the sender may switch to any local finishing
+prompt and append copy-safe visible tokens. It may stop on model EOS, at a local
+budget, or after user editing.
 
-Once every real bit is confirmed, the sender repeatedly chooses candidate index
-zero until the visible carrier ends in `.`, `!`, or `?`, subject to the address
-finish-token limit. Finish tokens do not update arithmetic state and carry no
-payload.
+D carries no bits, is not authenticated, is not reconstructed, and is not
+validated by the receiver. The receiver stops model evaluation at the token
+that completes B/C and ignores the remainder. Final user edits must preserve the
+tokenization of A/B/C; the application can verify this locally before sending.
 
-The receiver identifies the data boundary from the recovered stream length and
-requires every remaining token to equal the deterministic candidate zero for
-its exact context.
-
-## 11. Line endings and carrier transport
-
-LF is a normal visible character and can encode information like any other
-eligible token. Multiple paragraphs are valid.
-
-Before primer extraction and tokenization, a received carrier is canonicalized:
-
-```text
-CRLF -> LF
-CR   -> LF
-```
-
-NUL is rejected. A single terminal file/text-area line ending may be removed by
-the CLI because generated carriers always finish with sentence punctuation.
-Other whitespace is preserved exactly.
-
-Arbitrary whitespace folding, Unicode normalization, quote insertion, or prose
-editing is not repaired and can make the carrier undecodable.
-
-## 12. Decoding
+## 11. Decoding
 
 The receiver:
 
-1. canonicalizes line endings;
-2. extracts and validates the first-sentence primer;
-3. renders the exact prompt from address, subject, and primer;
-4. tokenizes the complete carrier;
-5. recomputes the candidate table at each continuation token;
-6. feeds each observed candidate index to the arithmetic encoder;
-7. derives and parses the masked stream length after the first 32 bytes;
-8. validates the virtual suffix and greedy finish tokens;
-9. unmasks and validates the outer payload;
-10. authenticates HPKE with the visible context;
-11. decompresses and validates the inner frame.
+1. canonicalizes CRLF/CR to LF and tokenizes the complete carrier;
+2. takes tokens 0..63 as A;
+3. renders the fixed payload prompt and appends A as assistant prefix;
+4. runs the arithmetic encoder from token 64;
+5. recovers and decrypts fixed B after 424 confirmed bits;
+6. continues the same arithmetic state until `53 + len(C)` bytes are complete;
+7. ignores every remaining D token;
+8. authenticates and decrypts C with the exact A token IDs;
+9. validates and decompresses the inner frame.
 
-Any mismatch fails closed.
+Any mismatch inside A/B/C fails closed. D is outside that boundary by design.
 
-## 13. Capacity metrics
+## 12. Limits and policies
 
-Implementations report:
+Wire-level fixed values are A=64 tokens, B=53 bytes, metadata layout, HPKE
+domains, arithmetic precision and frequency total. Carrier-size guards,
+generation timeouts, retry counts, D token budgets and lexical qualification
+filters are local resource or product policies, not decoding rules.
+
+## 13. Metrics
+
+The principal metric is:
 
 ```text
-K_all = visible Unicode code points / stream bytes
+K_all = visible Unicode code points / (len(B) + len(C))
 ```
 
-Visible text includes primer, arithmetic data, LF paragraph separators, and
-finish tokens. Useful companion metrics are UTF-8 carrier bytes per stream byte,
-confirmed bits per arithmetic token, characters per token, and generation time.
+Reports also distinguish A tokens, B/C arithmetic tokens, ignored D tokens,
+UTF-8 carrier bytes and generation/decoding throughput.
 
-## 14. Current qualification state
+## 14. Local application
 
-The pure codec, crypto, context binding, canonical line endings, and fake-model
-round trips are automated. The pinned MLX profile passes its deterministic
-self-test.
-
-The committed MLX fixture represents this exact protocol and completes a
-bit-identical stream recovery plus HPKE decryption. The next qualification step
-is cross-installation reproduction and improvement of candidate-construction
-runtime and carrier quality without changing the arithmetic tables.
+The Stage 4 FastAPI development application remains loopback-only with no
+session or Host/Origin gate, no permissive CORS, bounded JSON requests,
+serialized MLX access and authenticated SSE progress. The write screen accepts
+a public address, free writing brief and secret. The read screen needs only a
+local identity, its passphrase and the exact carrier; there is no subject field.

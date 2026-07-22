@@ -33,19 +33,18 @@
     }
   },
   "codec": {
-    "id": "cm-arithmetic-v1",
-    "top_n": 256,
+    "id": "cm-arithmetic",
+    "top_k": 20,
     "candidate_pool_multiplier": 8,
     "frequency_total": 32768,
     "logit_scale": 1024,
     "temperature_milli": 1000,
-    "length_bias_milli": 100,
-    "finish_tokens": 32,
-    "visible_filter": "cm-visible-email-v1",
-    "prompt_template": "cm-email-one-paragraph-v1",
+    "prefix_tokens": 64,
+    "visible_filter": "cm-visible-email",
+    "prompt_template": "cm-packet-email",
     "self_test": {
       "steps": 4,
-      "path_indices": [0, 1, 255, 0],
+      "path_indices": [0, 1, 19, 0],
       "expected_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     }
   },
@@ -53,11 +52,9 @@
     "language": "fr-FR",
     "relationship": "deux amis proches",
     "tone": "familier, calme et naturel",
-    "persona_sender": "une personne ordinaire écrivant un bref email",
+    "persona_sender": "une personne ordinaire écrivant un email personnel détaillé",
     "persona_recipient": "un ami de longue date",
     "standing_context": "Ils échangent occasionnellement des nouvelles du quotidien.",
-    "max_sentences": 4,
-    "max_questions": 1,
-    "max_visible_characters": 4000
+    "max_visible_characters": 20000
   }
 }

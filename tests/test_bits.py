@@ -56,3 +56,16 @@ def test_bit_offsets_are_bounded() -> None:
         FramedBitSource(b"").bit(-1)
     with pytest.raises(IndexError):
         BitCollector().bit(0)
+
+
+def test_custom_suffix_is_generated_once_and_cached() -> None:
+    draws: list[int] = []
+
+    def draw(offset: int) -> int:
+        draws.append(offset)
+        return offset % 2
+
+    source = FramedBitSource(b"\x00", draw)
+    assert source.bit(10) == 0
+    assert source.bit(9) == 1
+    assert draws == [0, 1, 2]

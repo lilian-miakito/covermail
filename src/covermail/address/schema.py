@@ -37,12 +37,12 @@ _RUNTIME = {
 }
 _CODEC = {
     "id",
-    "top_n",
+    "top_k",
     "candidate_pool_multiplier",
     "frequency_total",
     "logit_scale",
     "temperature_milli",
-    "finish_tokens",
+    "prefix_tokens",
     "visible_filter",
     "prompt_template",
     "self_test",
@@ -201,18 +201,18 @@ def _validate_codec(value: object) -> None:
     codec = _object(value, "codec", _CODEC)
     codec_id = _string(codec["id"], "codec.id", minimum=1, maximum=64, ascii_only=True)
     _literal(codec_id, "codec.id", "cm-arithmetic")
-    top_n = _integer(codec["top_n"], "codec.top_n", 2, 512)
+    top_k = _integer(codec["top_k"], "codec.top_k", 2, 512)
     multiplier = _integer(
         codec["candidate_pool_multiplier"], "codec.candidate_pool_multiplier", 1, 16
     )
-    if top_n * multiplier > 4096:
+    if top_k * multiplier > 4096:
         raise AddressValidationError("codec candidate pool exceeds 4096")
     _literal(codec["frequency_total"], "codec.frequency_total", 32768)
     _literal(codec["logit_scale"], "codec.logit_scale", 1024)
     _integer(codec["temperature_milli"], "codec.temperature_milli", 100, 2000)
-    _integer(codec["finish_tokens"], "codec.finish_tokens", 0, 128)
+    _literal(codec["prefix_tokens"], "codec.prefix_tokens", 64)
     _literal(codec["visible_filter"], "codec.visible_filter", "cm-visible-email")
-    _literal(codec["prompt_template"], "codec.prompt_template", "cm-email-continuation")
+    _literal(codec["prompt_template"], "codec.prompt_template", "cm-packet-email")
 
     self_test = _object(codec["self_test"], "codec.self_test", _SELF_TEST)
     _literal(self_test["steps"], "codec.self_test.steps", 4)
@@ -221,7 +221,7 @@ def _validate_codec(value: object) -> None:
         isinstance(item, bool) or not isinstance(item, int) for item in path
     ):
         raise AddressValidationError("codec.self_test.path_indices must be an integer array")
-    if path != [0, 1, top_n - 1, 0]:
+    if path != [0, 1, top_k - 1, 0]:
         raise AddressValidationError("codec.self_test.path_indices is not the required path")
     digest = _string(
         self_test["expected_sha256"],
