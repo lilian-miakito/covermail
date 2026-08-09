@@ -14,7 +14,7 @@ from covermail.models.profile import LoadedProfile
 from covermail.web.app import AppConfig, create_app
 
 HEADERS: dict[str, str] = {}
-BRIEF = "Écris à un ami à propos du jardin."
+BRIEF = "Write to a friend about the garden."
 
 
 def _app(tmp_path: Path, address: dict[str, Any]) -> tuple[TestClient, Path]:
@@ -135,7 +135,7 @@ def test_full_web_identity_encode_stream_and_decode_round_trip(
             json={
                 "address": public_address,
                 "prompt": BRIEF,
-                "secret": "Rendez-vous a 18h.",
+                "secret": "Meet me at 6 p.m.",
             },
         )
         assert estimate.status_code == 200
@@ -149,7 +149,7 @@ def test_full_web_identity_encode_stream_and_decode_round_trip(
             json={
                 "address": public_address,
                 "prompt": BRIEF,
-                "secret": "Rendez-vous a 18h.",
+                "secret": "Meet me at 6 p.m.",
                 "fingerprint_confirmed": True,
                 "live_preview": True,
             },
@@ -192,7 +192,7 @@ def test_full_web_identity_encode_stream_and_decode_round_trip(
         assert decode.status_code == 202
         decoded = _wait_job(client, decode.json()["job_id"])
         assert decoded["state"] == "complete"
-        assert decoded["result"]["secret"] == "Rendez-vous a 18h."
+        assert decoded["result"]["secret"] == "Meet me at 6 p.m."
 
 
 def test_address_inspection_and_identity_listing(

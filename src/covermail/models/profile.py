@@ -19,6 +19,8 @@ from covermail.models.mlx_adapter import (
     runtime_fingerprint,
 )
 
+PREFIX_TEMPERATURE_MILLI = 1000
+
 
 @dataclass(frozen=True, slots=True)
 class LoadedProfile:
@@ -68,14 +70,19 @@ def load_profile(
     if adapter is None:
         adapter = MlxLanguageModel.load(model_root, artifacts)
     cover = _mapping(validated["cover"], "cover")
-    config = CandidateConfig(
+    payload_config = CandidateConfig(
         top_k=cast(int, codec["top_k"]),
         candidate_pool_multiplier=cast(int, codec["candidate_pool_multiplier"]),
         temperature_milli=cast(int, codec["temperature_milli"]),
     )
+    prefix_config = CandidateConfig(
+        top_k=cast(int, codec["top_k"]),
+        candidate_pool_multiplier=cast(int, codec["candidate_pool_multiplier"]),
+        temperature_milli=PREFIX_TEMPERATURE_MILLI,
+    )
 
     payload_prompt = adapter.render_prompt(cover, "payload")
-    payload_model = PromptedLanguageModel(adapter, adapter.tokenize(payload_prompt), config)
+    payload_model = PromptedLanguageModel(adapter, adapter.tokenize(payload_prompt), payload_config)
     self_test_fields = _mapping(codec["self_test"], "codec.self_test")
     path_indices = self_test_fields["path_indices"]
     if not isinstance(path_indices, list) or not all(
@@ -92,9 +99,9 @@ def load_profile(
     prefix_prompt = adapter.render_prompt(cover, "prefix", writing_brief=writing_brief)
     finish_prompt = adapter.render_prompt(cover, "finish")
     return LoadedProfile(
-        PromptedLanguageModel(adapter, adapter.tokenize(prefix_prompt), config),
+        PromptedLanguageModel(adapter, adapter.tokenize(prefix_prompt), prefix_config),
         payload_model,
-        PromptedLanguageModel(adapter, adapter.tokenize(finish_prompt), config),
+        PromptedLanguageModel(adapter, adapter.tokenize(finish_prompt), prefix_config),
         prefix_prompt,
         payload_prompt,
         finish_prompt,

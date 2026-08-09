@@ -1,0 +1,96 @@
+{
+  "codec": {
+    "candidate_pool_multiplier": 8,
+    "prefix_tokens": 64,
+    "frequency_total": 32768,
+    "id": "cm-arithmetic",
+    "logit_scale": 1024,
+    "prompt_template": "cm-packet-email",
+    "self_test": {
+      "expected_sha256": "6fe08caa6a72b092ef4badb3f6670be1bb5e7d164ce4681d123f9bf436d8fbe9",
+      "path_indices": [0, 1, 19, 0],
+      "steps": 4
+    },
+    "temperature_milli": 1600,
+    "top_k": 20,
+    "visible_filter": "cm-visible-email"
+  },
+  "cover": {
+    "language": "en-US",
+    "max_visible_characters": 20000,
+    "persona_recipient": "a longtime friend",
+    "persona_sender": "an ordinary person writing a personal email",
+    "relationship": "two close friends",
+    "standing_context": "They occasionally exchange everyday news.",
+    "tone": "casual, calm, and natural"
+  },
+  "format": "covermail-address",
+  "hpke": {
+    "aead": "AES_128_GCM",
+    "kdf": "HKDF_SHA256",
+    "kem": "DHKEM_X25519_HKDF_SHA256",
+    "mode": "BASE"
+  },
+  "model": {
+    "artifacts": [
+      {
+        "path": "chat_template.jinja",
+        "sha256": "215fb003a8e13d40e26587f89951f26eac71bb32ddeac209bcbb8161df9e315f",
+        "size": 7759
+      },
+      {
+        "path": "config.json",
+        "sha256": "390032313a9203fb1dfadfadd75bdceb46ea5409878c88cf34b96cd3739d6f28",
+        "size": 1986
+      },
+      {
+        "path": "model-00001-of-00002.safetensors",
+        "sha256": "0b7c0de8f4da647f054095add6d93c1cfdd7f7f38128ecb666ebace634169aa6",
+        "size": 5294694324
+      },
+      {
+        "path": "model-00002-of-00002.safetensors",
+        "sha256": "aa49bdcf4394ab16f0cbd45b750313978073f514da8b56e802ee3c7568b3a865",
+        "size": 301990235
+      },
+      {
+        "path": "model.safetensors.index.json",
+        "sha256": "91360719f4ce9383f46bb5750cd0b8cb4aec070dd8804c11ed94585a9924409b",
+        "size": 103195
+      },
+      {
+        "path": "tokenizer.json",
+        "sha256": "286acad9b0e27fce778ac429763536accf618ccb6ed72963b6f94685e531c5c7",
+        "size": 17077402
+      },
+      {
+        "path": "tokenizer_config.json",
+        "sha256": "54b6ee53caf87c338527472386b6adcc4253bf48b93cc9c27fe1d25db4ff36fc",
+        "size": 21188
+      }
+    ],
+    "backend": "mlx-lm",
+    "model_id": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+    "revision": "182f003f01daa75f9de0f2c4d379722fd0bc1c61",
+    "runtime": {
+      "logits_dtype": "float32",
+      "packages": {
+        "jinja2": "3.1.6",
+        "mlx": "0.31.2",
+        "mlx-lm": "0.31.3",
+        "numpy": "2.5.1",
+        "safetensors": "0.8.0",
+        "tokenizers": "0.22.2",
+        "transformers": "5.14.1"
+      },
+      "profile": "darwin-arm64-mlx",
+      "python_version": "3.12.5",
+      "trust_remote_code": false
+    }
+  },
+  "recipient": {
+    "hpke_public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+    "label": "Alice Ministral local fixture"
+  },
+  "version": 1
+}

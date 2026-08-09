@@ -9,6 +9,7 @@ from typing import Any, cast
 from cryptography.hazmat.primitives.asymmetric import x25519
 
 from covermail.address.canonical import decode_base64url
+from covermail.cover.prompt import PROMPT_TEMPLATE_ID
 from covermail.errors import AddressValidationError
 
 type Address = dict[str, Any]
@@ -212,7 +213,7 @@ def _validate_codec(value: object) -> None:
     _integer(codec["temperature_milli"], "codec.temperature_milli", 100, 2000)
     _literal(codec["prefix_tokens"], "codec.prefix_tokens", 64)
     _literal(codec["visible_filter"], "codec.visible_filter", "cm-visible-email")
-    _literal(codec["prompt_template"], "codec.prompt_template", "cm-packet-email")
+    _literal(codec["prompt_template"], "codec.prompt_template", PROMPT_TEMPLATE_ID)
 
     self_test = _object(codec["self_test"], "codec.self_test", _SELF_TEST)
     _literal(self_test["steps"], "codec.self_test.steps", 4)

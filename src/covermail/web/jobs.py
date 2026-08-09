@@ -99,10 +99,7 @@ class JobManager:
             job.transition("cancelled")
         except Exception as error:
             job.internal_error = error
-            job.error = (
-                "L’opération locale a échoué. "  # noqa: RUF001
-                "Vérifiez les entrées et la compatibilité du modèle."
-            )
+            job.error = "The local operation failed. Check the inputs and model compatibility."
             job.transition("failed")
 
     def get(self, job_id: str) -> Job | None:

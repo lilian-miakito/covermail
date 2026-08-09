@@ -8,7 +8,7 @@ The language model never sees the plaintext and provides no cryptographic securi
 
 1. The recipient creates an encrypted local identity and shares a public Covermail address.
 2. The sender encrypts a UTF-8 message with the recipient's public key.
-3. An arithmetic codec maps the encrypted packet to valid token choices from a local Qwen model.
+3. An arithmetic codec maps the encrypted packet to valid token choices from a local Ministral model.
 4. The resulting carrier can be copied and sent as ordinary text.
 5. The recipient replays the same token distributions, recovers the packet and decrypts the message.
 
@@ -16,7 +16,7 @@ The language model never sees the plaintext and provides no cryptographic securi
 secret
   → HPKE encryption
   → encrypted packet
-  → arithmetic coding over Qwen token probabilities
+  → arithmetic coding over Ministral token probabilities
   → visible carrier text
 ```
 
@@ -27,7 +27,7 @@ Both sides must use the exact model, runtime and protocol parameters pinned by t
 - the Covermail protocol implementation;
 - HPKE recipient identities and portable public addresses;
 - deterministic arithmetic encoding over model token distributions;
-- a qualified Qwen profile for MLX on Apple Silicon;
+- a pinned Ministral 3 Instruct profile for MLX on Apple Silicon;
 - a command-line interface;
 - a local FastAPI application;
 - model qualification and cross-installation verification tools;
@@ -66,19 +66,19 @@ The normative details are documented in [docs/protocol.md](docs/protocol.md).
 
 The current real-model profile uses:
 
-- `mlx-community/Qwen3.5-4B-4bit`;
-- revision `0e7ffd5c629ef7719d4cbc04069232580bfa9d9c`;
+- `mlx-community/Ministral-3-8B-Instruct-2512-4bit`;
+- revision `182f003f01daa75f9de0f2c4d379722fd0bc1c61`;
 - MLX on Apple Silicon;
-- Python 3.12 or 3.13.
+- exact Python and package versions recorded in the public address.
 
 The committed qualification bundle contains three independently generated carriers:
 
 | Measure | Result |
 | --- | --- |
-| Encrypted packet size | 150–171 bytes |
-| Carrier size | 710–777 tokens |
-| Visible characters per encrypted byte | 18.42–18.45 |
-| Generation speed | 27.3–27.9 tokens/s |
+| Encrypted packet size | 161–164 bytes |
+| Carrier size | 465–495 tokens |
+| Visible characters per encrypted byte | 12.21–13.04 |
+| Generation speed | 17.8–19.2 tokens/s |
 | Exact local recovery | 3/3 carriers |
 
 These figures were measured on the qualification host. Reproduction and bidirectional verification on a second clean installation are still required before claiming cross-installation interoperability.
@@ -94,7 +94,7 @@ uv sync --extra dev --extra mlx
 With the qualified model already prepared locally:
 
 ```bash
-MODEL_ROOT=.covermail/models/mlx-community--Qwen3.5-4B-4bit/0e7ffd5c629ef7719d4cbc04069232580bfa9d9c
+MODEL_ROOT=.covermail/models/mlx-community--Ministral-3-8B-Instruct-2512-4bit/182f003f01daa75f9de0f2c4d379722fd0bc1c61
 
 uv run covermail app --model-root "$MODEL_ROOT"
 ```
@@ -118,7 +118,7 @@ Create a recipient identity:
 
 ```bash
 uv run covermail identity-create \
-  tests/fixtures/mlx_qwen35_4b_4bit/address.json \
+  tests/fixtures/mlx_ministral3_8b_instruct_4bit/address.json \
   --identities-dir .covermail/identities \
   --public-address alice.covermail.json
 ```
@@ -152,7 +152,7 @@ Generate a real-model qualification bundle and verify every carrier locally:
 
 ```bash
 uv run covermail model-qualify \
-  tests/fixtures/mlx_qwen35_4b_4bit/address.json \
+  tests/fixtures/mlx_ministral3_8b_instruct_4bit/address.json \
   --model-root "$MODEL_ROOT" \
   --output qualification-host-a.json
 ```
@@ -161,7 +161,7 @@ Verify the bundle on a second compatible installation:
 
 ```bash
 uv run covermail model-qualify \
-  tests/fixtures/mlx_qwen35_4b_4bit/address.json \
+  tests/fixtures/mlx_ministral3_8b_instruct_4bit/address.json \
   --model-root "$MODEL_ROOT" \
   --verify-bundle qualification-host-a.json \
   --output verification-host-b.json

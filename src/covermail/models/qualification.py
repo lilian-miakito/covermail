@@ -40,26 +40,26 @@ class QualificationCase:
 QUALIFICATION_CASES = (
     QualificationCase(
         "garden",
-        "Écris à un ami proche pour lui donner des nouvelles concrètes du jardin.",
-        "On se retrouve jeudi à 18 h.\n",
+        "Write to a close friend with specific news about the garden.",
+        "Meet me at the station on Thursday at 6 p.m.\n",
     ),
     QualificationCase(
         "journey",
-        "Commence un mail personnel sur le trajet de cette semaine et le train.",
-        "Le train arrivera vendredi en début de soirée.\n",
+        "Start a personal email about this week's journey and the train ride.",
+        "The train will arrive early Friday evening.\n",
     ),
     QualificationCase(
         "dinner",
-        "Écris naturellement à propos du dîner prévu samedi entre amis.",
-        "Pense à apporter le livre dont nous avons parlé.\n",
+        "Write naturally about the dinner planned with friends this Saturday.",
+        "Remember to bring the book we discussed.\n",
     ),
 )
 
 _WORD = re.compile(r"[^\W\d_]+(?:['\N{RIGHT SINGLE QUOTATION MARK}][^\W\d_]+)*", re.UNICODE)
 _SENTENCE = re.compile(r"[^.!?]+[.!?]")
 _SIGNOFF = re.compile(
-    r"(?:^|[.!?]\s+)(?:amicalement|bien à toi|ton ami|à bientôt|affectueusement)\b",
-    re.IGNORECASE,
+    r"(?:^|\n)(?:best|best wishes|sincerely|take care|see you soon|talk soon|warmly|yours)\b",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 

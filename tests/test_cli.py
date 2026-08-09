@@ -9,7 +9,7 @@ from covermail.address.canonical import canonical_json
 from covermail.cli import main
 from covermail.models.mlx_adapter import MODEL_ARTIFACT_PATHS
 
-BRIEF = "Écris à un ami à propos du jardin."
+BRIEF = "Write to a friend about the garden."
 
 
 def _fake_profile(model: object) -> SimpleNamespace:
@@ -39,7 +39,7 @@ def test_cli_identity_carrier_round_trip(
     recovered = tmp_path / "recovered.txt"
     identities = tmp_path / "identities"
     template.write_bytes(canonical_json(address))
-    secret.write_text("Message CLI — contexte lié", encoding="utf-8")
+    secret.write_text("CLI message — bound context", encoding="utf-8")
     answers = iter(["passphrase", "passphrase", "passphrase"])
     monkeypatch.setattr("covermail.cli.getpass.getpass", lambda prompt: next(answers))
     model = FakeLanguageModel()

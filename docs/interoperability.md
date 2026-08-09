@@ -18,12 +18,10 @@ private key or hidden plaintext. Verification rebuilds the fixed payload model
 context from the observed A tokens, decodes B/C and compares the packet bytes.
 Lexical signals are reported but never determine packet validity.
 
-The current accepted carriers contain 150, 169 and 171 encrypted packet bytes,
-710–777 total tokens and `K_all = 18.4201..18.4503`. All three passed on their
-first trial with the 64-token A and fixed 1,200-word payload horizon, without a
-lexical flag. Under the earlier short-horizon prompt, journey and dinner each
-required a local retry after reaching the 4096-step budget. This prompt-level
-result does not turn the local budget into a wire-format rule.
+The current accepted carriers contain 161–164 encrypted packet bytes, 465–495
+total tokens and `K_all = 12.21..13.04`. All three passed on their first trial
+with a 64-token A, the fixed English payload prompt and no lexical flag. These
+host measurements are not wire-format rules.
 
 Before claiming interoperability:
 

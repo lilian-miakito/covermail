@@ -43,8 +43,8 @@ def _install_fake_profile(monkeypatch: Any) -> None:
 
 def test_quality_signals_surface_repetition_and_signoff() -> None:
     carrier = (
-        "Bonjour. Un petit mot revient souvent. Un petit mot revient souvent. "
-        + "Un petit mot revient souvent. Ton ami pense à toi."
+        "Hello. One short phrase appears often. One short phrase appears often. "
+        + "One short phrase appears often. Your friend is thinking of you.\nBest,\nAlex"
     )
     signals = quality_signals(carrier)
     flags = cast(list[str], signals["flags"])

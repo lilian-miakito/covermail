@@ -40,8 +40,8 @@ from covermail.web.jobs import Job, JobManager
 API_PREFIX = "/api/v1"
 MAX_REQUEST_BYTES = 1 << 20
 MAX_CARRIER_CHARACTERS = 200_000
-ESTIMATED_TOKENS_PER_STREAM_BYTE = 4.8
-ESTIMATED_CHARACTERS_PER_STREAM_BYTE = 18.5
+ESTIMATED_TOKENS_PER_STREAM_BYTE = 3.2
+ESTIMATED_CHARACTERS_PER_STREAM_BYTE = 13.5
 ProfileLoader = Callable[[Address, Path, str, MlxLanguageModel | None], LoadedProfile]
 
 
@@ -137,10 +137,10 @@ def _profile_loader(
 def _identity_path(config: AppConfig, identity_id: str) -> Path:
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
     if not identity_id or any(character not in alphabet for character in identity_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Identité locale introuvable.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Local identity not found.")
     path = config.identities_dir / identity_id
     if path.parent != config.identities_dir or path.is_symlink() or not path.is_dir():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Identité locale introuvable.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Local identity not found.")
     return path
 
 
@@ -164,7 +164,7 @@ def _require_supported_address(address: Address, template: Address) -> None:
     if address["model"] != template["model"] or address["codec"] != template["codec"]:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Cette adresse ne correspond pas au profil Qwen qualifié par cette application.",
+            "This address does not match the model profile supported by this application.",
         )
 
 
@@ -194,23 +194,23 @@ def _install_local_middleware(app: FastAPI) -> None:
             if content_type != "application/json":
                 return _safe_error_response(
                     status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                    "Cette API accepte uniquement du JSON.",
+                    "This API accepts JSON only.",
                 )
             declared = request.headers.get("content-length")
             if declared is not None:
                 try:
                     if int(declared) > MAX_REQUEST_BYTES:
                         return _safe_error_response(
-                            status.HTTP_413_CONTENT_TOO_LARGE, "Requête trop volumineuse."
+                            status.HTTP_413_CONTENT_TOO_LARGE, "Request is too large."
                         )
                 except ValueError:
-                    return _safe_error_response(status.HTTP_400_BAD_REQUEST, "Taille invalide.")
+                    return _safe_error_response(status.HTTP_400_BAD_REQUEST, "Invalid size.")
             body = bytearray()
             async for chunk in request.stream():
                 body.extend(chunk)
                 if len(body) > MAX_REQUEST_BYTES:
                     return _safe_error_response(
-                        status.HTTP_413_CONTENT_TOO_LARGE, "Requête trop volumineuse."
+                        status.HTTP_413_CONTENT_TOO_LARGE, "Request is too large."
                     )
             # BaseHTTPMiddleware's call_next reuses Request.wrapped_receive. Supplying
             # the bounded body here lets the downstream parser consume exactly once.
@@ -268,7 +268,7 @@ def create_app(
             {"path": [str(part) for part in item["loc"]], "message": item["msg"]}
             for item in error.errors()
         ]
-        return JSONResponse({"detail": "Entrée invalide.", "errors": sanitized}, status_code=422)
+        return JSONResponse({"detail": "Invalid input.", "errors": sanitized}, status_code=422)
 
     @app.exception_handler(CovermailError)
     async def covermail_error(_: Request, error: CovermailError) -> JSONResponse:
@@ -308,7 +308,7 @@ def create_app(
     async def create_identity(request: IdentityCreateRequest) -> dict[str, Any]:
         passphrase = request.passphrase.get_secret_value()
         if passphrase != request.passphrase_confirmation.get_secret_value():
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Les phrases secrètes diffèrent.")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Passphrases do not match.")
         template = copy.deepcopy(address_template)
         cast(dict[str, Any], template["recipient"])["label"] = request.label
         address, private_key = generate_identity(template)
@@ -364,7 +364,7 @@ def create_app(
         if not request.fingerprint_confirmed:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                "Confirmez l'empreinte du destinataire.",
+                "Confirm the recipient fingerprint.",
             )
 
         def work(job: Job) -> dict[str, Any]:

@@ -20,7 +20,7 @@ from covermail.errors import (
 )
 
 DEFAULT_PREFIX_TOKENS = 64
-DEFAULT_FINISH_TOKENS = 64
+DEFAULT_FINISH_TOKENS = 128
 MAX_FAKE_CARRIER_CHARACTERS = 200_000
 
 CarrierPhase = Literal["prefix", "metadata", "body", "finish"]

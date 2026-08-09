@@ -21,12 +21,12 @@ from covermail.errors import AddressValidationError
 def test_valid_address_and_fixed_fingerprint(address: dict[str, Any]) -> None:
     validated = validate_address(address)
     assert address_digest(validated).hex() == (
-        "35b29ea279e33ebd0e4b70fdd43cec6ba17c6856dff62fa9488fa5ac95c32d9c"
+        "21567de82009c5e0340d28a276b8b62b4c3cbc07a8e1354944db4c1d7de3b591"
     )
-    assert address_id(validated).hex() == "35b29ea279e33ebd0e4b70fdd43cec6b"
-    assert machine_address_id(validated) == "NbKeonnjPr0OS3D91Dzsaw"
+    assert address_id(validated).hex() == "21567de82009c5e0340d28a276b8b62b"
+    assert machine_address_id(validated) == "IVZ96CAJxeA0DSiidri2Kw"
     assert human_fingerprint(validated) == (
-        "GWZJ 5ITZ 4M7L 2DSL OD65 IPHM NOQX Y2CW 373C 7KKI R6S2 ZFOD FWOA"
+        "EFLH 32BA BHC6 ANAN FCRH NOFW FNGD ZPAH VDQT KSKE 3NGB 27PD WWIQ"
     )
 
 

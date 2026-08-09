@@ -30,7 +30,7 @@ boundary does not need to coincide with a token boundary.
 ## 3. Public address
 
 The address is strict canonical JSON. It pins the recipient X25519 public key,
-exact Qwen model revision and artifacts, runtime packages, cover persona,
+exact Ministral model revision and artifacts, runtime packages, cover persona,
 candidate construction, arithmetic parameters, prompt `cm-packet-email`, 64
 prefix tokens, and the model self-test. Unknown or missing fields fail closed.
 
@@ -53,10 +53,10 @@ fixed payload prompt || exact 64 token IDs of A
 ```
 
 for the first arithmetic token and extend that same visible prefix thereafter.
-The fixed payload prompt establishes a 1,200-word horizon, treats A as an early
-draft, and defers conclusion, signoff and postscript until the separate D
-finishing prompt. This target is deliberately independent of packet length so
-both parties know it before B is decoded.
+The fixed payload prompt asks the model to preserve A's topic, people, tone,
+point of view, tense and syntax while deferring conclusion and signoff until D.
+It does not impose a target length or ask the model to invent new subtopics.
+Both parties render this exact fixed prompt before decoding starts.
 
 ## 5. Prefix binding
 
@@ -136,9 +136,9 @@ of the logical B/C boundary.
 
 ## 10. D — local finish
 
-After all B/C bits are confirmed, the sender may switch to any local finishing
-prompt and append copy-safe visible tokens. It may stop on model EOS, at a local
-budget, or after user editing.
+After all B/C bits are confirmed, the sender switches to the fixed local
+finishing prompt and appends greedy copy-safe visible tokens. The default stops
+on model EOS or after 128 tokens, whichever happens first.
 
 D carries no bits, is not authenticated, is not reconstructed, and is not
 validated by the receiver. The receiver stops model evaluation at the token

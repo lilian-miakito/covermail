@@ -319,7 +319,7 @@ def build_parser() -> argparse.ArgumentParser:
     carrier_encode.add_argument("--model-root", type=Path, required=True)
     carrier_encode.add_argument("--prompt", required=True, help="free writing brief for A")
     carrier_encode.add_argument("--message", required=True, help="UTF-8 secret file, or -")
-    carrier_encode.add_argument("--finish-tokens", type=int, default=64)
+    carrier_encode.add_argument("--finish-tokens", type=int, default=128)
     carrier_encode.add_argument("--output", required=True, help="UTF-8 carrier file, or -")
     carrier_encode.set_defaults(handler=_carrier_encode)
 

@@ -1,4 +1,4 @@
-"""Qualified MLX-LM adapter for the active Qwen darwin-arm64 profile."""
+"""Qualified MLX-LM adapter for the active Ministral darwin-arm64 profile."""
 
 from __future__ import annotations
 
@@ -16,12 +16,13 @@ from covermail.errors import ModelProfileError
 from covermail.models.manifest import verify_artifact_manifest
 
 PROFILE_ID = "darwin-arm64-mlx"
-MODEL_ID = "mlx-community/Qwen3.5-4B-4bit"
-MODEL_REVISION = "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c"
+MODEL_ID = "mlx-community/Ministral-3-8B-Instruct-2512-4bit"
+MODEL_REVISION = "182f003f01daa75f9de0f2c4d379722fd0bc1c61"
 MODEL_ARTIFACT_PATHS = (
     "chat_template.jinja",
     "config.json",
-    "model.safetensors",
+    "model-00001-of-00002.safetensors",
+    "model-00002-of-00002.safetensors",
     "model.safetensors.index.json",
     "tokenizer.json",
     "tokenizer_config.json",
@@ -83,23 +84,25 @@ def _validate_model_config(root: Path) -> None:
         value = json.loads((root / "config.json").read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ModelProfileError("model config is not valid local JSON") from error
-    if not isinstance(value, dict) or value.get("model_type") != "qwen3_5":
-        raise ModelProfileError("model config is not the qualified Qwen architecture")
+    if not isinstance(value, dict) or value.get("model_type") != "mistral3":
+        raise ModelProfileError("model config is not the qualified Mistral 3 architecture")
     if "model_file" in value or "auto_map" in value:
         raise ModelProfileError("model config requests executable or remote model code")
     text_config = value.get("text_config")
-    if not isinstance(text_config, dict) or text_config.get("model_type") != "qwen3_5_text":
-        raise ModelProfileError("model config has no qualified Qwen text architecture")
+    if not isinstance(text_config, dict) or text_config.get("model_type") != "ministral3":
+        raise ModelProfileError("model config has no qualified Ministral text architecture")
     expected_text = {
-        "full_attention_interval": 4,
-        "mamba_ssm_dtype": "float32",
-        "num_hidden_layers": 32,
-        "vocab_size": 248320,
+        "head_dim": 128,
+        "hidden_size": 4096,
+        "num_attention_heads": 32,
+        "num_hidden_layers": 34,
+        "num_key_value_heads": 8,
+        "vocab_size": 131072,
     }
     if any(text_config.get(name) != expected for name, expected in expected_text.items()):
-        raise ModelProfileError("model config does not match the qualified Qwen layout")
+        raise ModelProfileError("model config does not match the qualified Ministral layout")
     if "model_file" in text_config or "auto_map" in text_config:
-        raise ModelProfileError("Qwen text config requests executable or remote model code")
+        raise ModelProfileError("Ministral text config requests executable or remote model code")
     quantization = value.get("quantization")
     if not isinstance(quantization, dict):
         raise ModelProfileError("model config has no qualified MLX quantization")
@@ -150,6 +153,7 @@ class MlxLanguageModel:
                     tokenizer_config={
                         "local_files_only": True,
                         "trust_remote_code": False,
+                        "fix_mistral_regex": True,
                     },
                     lazy=False,
                     return_config=False,

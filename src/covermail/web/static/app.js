@@ -20,7 +20,7 @@ async function api(path, options = {}) {
     headers: {...apiHeaders, ...(options.headers || {})},
   });
   if (!response.ok) {
-    let detail = `Erreur locale (${response.status})`;
+    let detail = `Local error (${response.status})`;
     try {
       const body = await response.json();
       detail = body.detail || detail;
@@ -48,12 +48,12 @@ document.querySelectorAll("[data-open]").forEach((button) => button.addEventList
 document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => {
   const source = byId(button.dataset.copy);
   await navigator.clipboard.writeText(source.value || source.textContent || "");
-  toast("Copié dans le presse-papiers");
+  toast("Copied to clipboard");
 }));
 
 byId("create-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  byId("create-status").textContent = "Création et chiffrement de l’identité…";
+  byId("create-status").textContent = "Creating and encrypting the identity…";
   try {
     const result = await api("/identities", {method: "POST", body: JSON.stringify({
       label: byId("create-label").value,
@@ -67,7 +67,7 @@ byId("create-form").addEventListener("submit", async (event) => {
     byId("create-result").classList.remove("empty");
     byId("create-passphrase").value = "";
     byId("create-confirmation").value = "";
-    byId("create-status").textContent = "Identité enregistrée sur cet appareil.";
+    byId("create-status").textContent = "Identity saved on this device.";
   } catch (error) {
     byId("create-status").textContent = error.message;
   }
@@ -136,7 +136,7 @@ function scheduleEstimate() {
 ["write-prompt", "write-secret"].forEach((id) => byId(id).addEventListener("input", scheduleEstimate));
 
 function stateLabel(value) {
-  return ({queued: "En file", framing: "Chiffrement", loading_model: "Chargement Qwen", generating: "Génération", validating: "Validation", decoding: "Décodage", unlocking: "Déverrouillage", complete: "Terminé", failed: "Échec", cancelled: "Annulé"})[value] || value;
+  return ({queued: "Queued", framing: "Encrypting", loading_model: "Loading Ministral", generating: "Generating", validating: "Validating", decoding: "Decoding", unlocking: "Unlocking", complete: "Complete", failed: "Failed", cancelled: "Cancelled"})[value] || value;
 }
 
 function resetProtocolView() {
@@ -145,13 +145,13 @@ function resetProtocolView() {
   visual.classList.add("empty");
   const placeholder = document.createElement("span");
   placeholder.className = "visual-placeholder";
-  placeholder.textContent = "Les tokens choisis par Qwen apparaîtront ici avec leur section…";
+  placeholder.textContent = "Tokens chosen with Ministral will appear here with their section.";
   visual.append(placeholder);
   Object.keys(sectionCounts).forEach((section) => {
     sectionCounts[section] = 0;
     byId(`tokens-${section.toLowerCase()}`).textContent = "0";
   });
-  byId("token-inspector").textContent = "Cliquez sur un token pour inspecter son ID et les bits confirmés.";
+  byId("token-inspector").textContent = "Select a token to inspect its ID and confirmed bits.";
 }
 
 function appendProtocolToken(annotation) {
@@ -195,7 +195,7 @@ byId("carrier-visual").addEventListener("click", (event) => {
 
 async function streamJob(jobId, onEvent) {
   const response = await fetch(`/api/v1/jobs/${jobId}/events`);
-  if (!response.ok) throw new Error("Flux de progression indisponible.");
+  if (!response.ok) throw new Error("Progress stream unavailable.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -245,7 +245,7 @@ byId("write-form").addEventListener("submit", async (event) => {
         byId("metric-tokens").textContent = message.token_index;
       }
     });
-    if (finished.state !== "complete") throw new Error(finished.error || "La génération a échoué.");
+    if (finished.state !== "complete") throw new Error(finished.error || "Generation failed.");
     const result = finished.result;
     byId("carrier-output").value = result.carrier;
     renderProtocolAnnotations(result.token_annotations);
@@ -253,11 +253,11 @@ byId("write-form").addEventListener("submit", async (event) => {
     byId("metric-speed").textContent = result.tokens_per_second.toFixed(1);
     byId("metric-k").textContent = result.k_all.toFixed(2);
     byId("encode-progress").style.width = "100%";
-    pill.textContent = "Terminé";
+    pill.textContent = "Complete";
     pill.className = "state-pill";
-    byId("write-status").textContent = "Carrier validé et prêt à copier.";
+    byId("write-status").textContent = "Carrier validated and ready to copy.";
   } catch (error) {
-    byId("encode-state").textContent = "Échec";
+    byId("encode-state").textContent = "Failed";
     byId("encode-state").className = "state-pill error";
     byId("write-status").textContent = error.message;
   }
@@ -268,7 +268,7 @@ async function refreshIdentities() {
     const result = await api("/identities");
     const select = byId("read-identity");
     const selected = select.value;
-    select.replaceChildren(new Option("Choisir…", ""));
+    select.replaceChildren(new Option("Choose…", ""));
     result.identities.forEach((identity) => select.add(new Option(`${identity.label} · ${identity.fingerprint.slice(0, 24)}…`, identity.address_id)));
     select.value = selected;
   } catch (error) { byId("read-status").textContent = error.message; }
@@ -294,16 +294,16 @@ byId("read-form").addEventListener("submit", async (event) => {
       }
     });
     byId("read-passphrase").value = "";
-    if (finished.state !== "complete") throw new Error(finished.error || "Le décodage a échoué.");
+    if (finished.state !== "complete") throw new Error(finished.error || "Decoding failed.");
     byId("secret-output").value = finished.result.secret;
     byId("decode-progress").style.width = "100%";
-    pill.textContent = "Authentifié";
+    pill.textContent = "Authenticated";
     pill.className = "state-pill";
-    byId("read-status").textContent = `${finished.result.plaintext_utf8_bytes} octets retrouvés.`;
+    byId("read-status").textContent = `${finished.result.plaintext_utf8_bytes} bytes recovered.`;
     await api(`/jobs/${started.job_id}`, {method: "DELETE"});
   } catch (error) {
     byId("read-passphrase").value = "";
-    byId("decode-state").textContent = "Échec";
+    byId("decode-state").textContent = "Failed";
     byId("decode-state").className = "state-pill error";
     byId("read-status").textContent = error.message;
   }
@@ -313,19 +313,19 @@ byId("clear-secret").addEventListener("click", () => {
   byId("secret-output").value = "";
   byId("read-carrier").value = "";
   byId("read-passphrase").value = "";
-  toast("Contenu effacé de l’écran");
+  toast("Content cleared from the screen");
 });
 
 async function refreshDiagnostics() {
   try {
     const health = await fetch("/api/v1/health").then((response) => response.json());
-    byId("diag-service").textContent = "Service loopback actif";
+    byId("diag-service").textContent = "Loopback service active";
     byId("diag-health").textContent = JSON.stringify(health, null, 2);
     const model = await api("/models/status");
-    byId("diag-model").textContent = model.ready_on_disk ? "Artefacts présents" : "Modèle incomplet";
+    byId("diag-model").textContent = model.ready_on_disk ? "Artifacts present" : "Model incomplete";
     byId("diag-model-data").textContent = JSON.stringify(model, null, 2);
   } catch (error) {
-    byId("diag-service").textContent = "Session invalide";
+    byId("diag-service").textContent = "Invalid session";
     byId("diag-health").textContent = error.message;
   }
 }

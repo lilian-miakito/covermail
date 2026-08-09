@@ -38,7 +38,7 @@
     "candidate_pool_multiplier": 8,
     "frequency_total": 32768,
     "logit_scale": 1024,
-    "temperature_milli": 1000,
+    "temperature_milli": 1600,
     "prefix_tokens": 64,
     "visible_filter": "cm-visible-email",
     "prompt_template": "cm-packet-email",
@@ -49,12 +49,12 @@
     }
   },
   "cover": {
-    "language": "fr-FR",
-    "relationship": "deux amis proches",
-    "tone": "familier, calme et naturel",
-    "persona_sender": "une personne ordinaire écrivant un email personnel détaillé",
-    "persona_recipient": "un ami de longue date",
-    "standing_context": "Ils échangent occasionnellement des nouvelles du quotidien.",
+    "language": "en-US",
+    "relationship": "two close friends",
+    "tone": "casual, calm, and natural",
+    "persona_sender": "an ordinary person writing a personal email",
+    "persona_recipient": "a longtime friend",
+    "standing_context": "They occasionally exchange everyday news.",
     "max_visible_characters": 20000
   }
 }

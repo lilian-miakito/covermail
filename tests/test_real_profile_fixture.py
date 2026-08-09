@@ -19,7 +19,7 @@ from covermail.service import EncryptedPacket, decrypt_message
 
 
 def test_real_profile_address_fixture_is_complete_and_valid() -> None:
-    directory = Path(__file__).parent / "fixtures/mlx_qwen35_4b_4bit"
+    directory = Path(__file__).parent / "fixtures/mlx_ministral3_8b_instruct_4bit"
     address = validate_address(read_address_file(directory / "address.json"))
     assert address["model"]["model_id"] == MODEL_ID
     assert address["model"]["revision"] == MODEL_REVISION
@@ -34,7 +34,7 @@ def test_real_profile_address_fixture_is_complete_and_valid() -> None:
 
 
 def test_real_profile_qualification_bundle_hpke_evidence() -> None:
-    directory = Path(__file__).parent / "fixtures/mlx_qwen35_4b_4bit"
+    directory = Path(__file__).parent / "fixtures/mlx_ministral3_8b_instruct_4bit"
     address = validate_address(read_address_file(directory / "address.json"))
     bundle = json.loads((directory / "qualification.json").read_text(encoding="utf-8"))
     private_key = x25519.X25519PrivateKey.from_private_bytes(bytes(range(1, 33)))

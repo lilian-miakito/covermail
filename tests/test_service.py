@@ -19,10 +19,10 @@ def test_end_to_end_packet_round_trip(
     address: dict[str, Any], private_key: x25519.X25519PrivateKey
 ) -> None:
     validated = validate_address(address)
-    packet = encrypt_message(validated, "Rendez-vous à 18 h ? 🔐", PREFIX)
+    packet = encrypt_message(validated, "Meet me at 6 p.m. 🔐", PREFIX)
     message_id, plaintext = decrypt_message(validated, private_key, packet, PREFIX)
     assert len(message_id) == 16
-    assert plaintext == "Rendez-vous à 18 h ? 🔐"
+    assert plaintext == "Meet me at 6 p.m. 🔐"
 
 
 @given(text=st.text(alphabet=st.characters(codec="utf-8"), max_size=1000))

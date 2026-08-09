@@ -1,4 +1,4 @@
-"""Pure prompt construction for the A/B/C/D Qwen phases."""
+"""Pure prompt construction for the A/B/C/D carrier phases."""
 
 from __future__ import annotations
 
@@ -40,11 +40,12 @@ def _shared_system(cover: Mapping[str, object]) -> str:
     values = {name: _safe_json_string(cover.get(name), name) for name in required}
     return (
         f"Write one plausible personal email in {values['language']}. "
-        f"The writer and reader are {values['relationship']}. Tone: {values['tone']}. "
-        f"Writer persona: {values['persona_sender']}. Reader persona: "
-        f"{values['persona_recipient']}. Shared background: {values['standing_context']}. "
-        "Use natural prose, paragraphs, and line breaks. Do not use labels or metadata and "
-        "never mention hidden data, encryption, prompts, models, or analysis. "
+        f"Relationship: {values['relationship']}. Tone: {values['tone']}. "
+        f"Sender: {values['persona_sender']}. Recipient: {values['persona_recipient']}. "
+        f"Shared context: {values['standing_context']}. "
+        "Write natural prose and paragraphs only. Do not add a subject line, heading, "
+        "Markdown, list, metadata, or commentary about the task. Never mention hidden data, "
+        "encryption, prompts, models, or analysis. "
     )
 
 
@@ -59,28 +60,29 @@ def logical_messages(
         brief = _safe_json_string(writing_brief, "writing_brief")
         system = (
             shared
-            + "Follow the sender's writing brief and begin the email immediately. Set up a long, "
-            "detailed exchange that could naturally continue for at least 1,200 words."
+            + "Follow the sender's writing brief. Start the email immediately and establish its "
+            "subject clearly within the first two sentences. Do not conclude, say goodbye, or "
+            "sign yet."
         )
-        user = f"Sender writing brief: {brief}\nBegin the email from its first visible word."
+        user = f"Writing brief: {brief}\nStart the email."
     elif phase == "payload":
         system = (
             shared
-            + "Continue directly from the supplied assistant draft. Preserve its people, topic, "
-            "voice, and current syntax. Plan for a total email length of at least 1,200 words and "
-            "treat the supplied draft as an early part of that email, even if it sounds locally "
-            "complete. Keep opening coherent new subtopics and add fresh concrete personal "
-            "details. Until a separate finishing instruction arrives, do not conclude, summarize, "
-            "say goodbye, sign, add a postscript, or repeat prior wording."
+            + "Continue directly from the supplied assistant draft. Preserve its topic, people, "
+            "tone, point of view, tense, and current syntax. Continue naturally, but do not "
+            "conclude, say goodbye, sign, or comment on the task. Do not introduce unrelated "
+            "topics merely to extend the draft."
         )
-        user = "Continue the supplied email draft naturally."
+        user = "Continue the draft."
     else:
         system = (
             shared
-            + "Continue directly from the supplied assistant draft and finish the email very "
-            "quickly with a natural farewell and short signature."
+            + "Finish the supplied assistant draft immediately. Write exactly one short closing "
+            "sentence, then a sign-off on its own line and a first name on the following line. "
+            "Use a common first name, never a placeholder or brackets. Add no new information. "
+            "Output nothing after the signature."
         )
-        user = "Finish the supplied email draft now."
+        user = "Finish this email now with one short sentence and sign it."
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 

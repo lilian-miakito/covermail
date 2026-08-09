@@ -15,7 +15,7 @@ def test_fake_model_abcd_hpke_round_trip(
     validated = validate_address(address)
     model = FakeLanguageModel()
     carrier = encode_carrier(
-        "Message à travers le carrier",
+        "Message carried through the cover text",
         model,
         model,
         model,
@@ -25,7 +25,7 @@ def test_fake_model_abcd_hpke_round_trip(
     assert carrier.metrics.prefix_tokens == 64
     assert carrier.metrics.payload_tokens > 0
     decoded = decode_carrier(carrier.text, model, validated, private_key)
-    assert decoded.secret == "Message à travers le carrier"
+    assert decoded.secret == "Message carried through the cover text"
     assert decoded.carrier.prefix_token_ids == carrier.prefix_token_ids
 
 

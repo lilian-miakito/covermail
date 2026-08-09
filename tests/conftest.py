@@ -63,12 +63,12 @@ def address(private_key: x25519.X25519PrivateKey) -> dict[str, Any]:
             },
         },
         "cover": {
-            "language": "fr-FR",
-            "relationship": "deux amis proches",
-            "tone": "familier",
-            "persona_sender": "une personne ordinaire",
-            "persona_recipient": "un ami",
-            "standing_context": "Des nouvelles du quotidien.",
+            "language": "en-US",
+            "relationship": "two close friends",
+            "tone": "casual",
+            "persona_sender": "an ordinary person",
+            "persona_recipient": "a longtime friend",
+            "standing_context": "They occasionally exchange everyday news.",
             "max_visible_characters": 4000,
         },
     }
