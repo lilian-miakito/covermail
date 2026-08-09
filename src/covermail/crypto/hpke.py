@@ -13,8 +13,6 @@ from covermail.errors import DecryptionError
 
 HPKE_INFO_LABEL = b"covermail/hpke-packet\x00"
 PREFIX_CONTEXT_LABEL = b"covermail/prefix-context\x00"
-METADATA_DOMAIN = b"metadata\x00"
-BODY_DOMAIN = b"body\x00"
 HPKE_SUITE = Suite(KEM.X25519, KDF.HKDF_SHA256, AEAD.AES_128_GCM)
 HPKE_ENCAPSULATED_KEY_BYTES = 32
 HPKE_TAG_BYTES = 16
@@ -30,11 +28,11 @@ def prefix_context_digest(prefix_token_ids: tuple[int, ...]) -> bytes:
     return hashlib.sha256(transcript).digest()
 
 
-def hpke_info(address: Address, prefix_token_ids: tuple[int, ...], domain: bytes) -> bytes:
-    if domain not in {METADATA_DOMAIN, BODY_DOMAIN}:
-        raise ValueError("unknown HPKE packet domain")
+def hpke_info(address: Address, prefix_token_ids: tuple[int, ...], header: bytes) -> bytes:
+    if not header:
+        raise ValueError("HPKE packet header is empty")
     return (
-        HPKE_INFO_LABEL + domain + address_digest(address) + prefix_context_digest(prefix_token_ids)
+        HPKE_INFO_LABEL + address_digest(address) + prefix_context_digest(prefix_token_ids) + header
     )
 
 
@@ -50,12 +48,12 @@ def encrypt_capsule(
     address: Address,
     plaintext: bytes,
     prefix_token_ids: tuple[int, ...],
-    domain: bytes,
+    header: bytes,
 ) -> bytes:
     return HPKE_SUITE.encrypt(
         plaintext,
         _public_key(address),
-        info=hpke_info(address, prefix_token_ids, domain),
+        info=hpke_info(address, prefix_token_ids, header),
     )
 
 
@@ -64,13 +62,13 @@ def decrypt_capsule(
     private_key: x25519.X25519PrivateKey,
     capsule: bytes,
     prefix_token_ids: tuple[int, ...],
-    domain: bytes,
+    header: bytes,
 ) -> bytes:
     try:
         return HPKE_SUITE.decrypt(
             capsule,
             private_key,
-            info=hpke_info(address, prefix_token_ids, domain),
+            info=hpke_info(address, prefix_token_ids, header),
         )
     except (InvalidTag, ValueError) as error:
         raise DecryptionError(

@@ -8,8 +8,8 @@ there are no historical wire formats or compatibility shims.
 Covermail encrypts a UTF-8 message and maps the pseudorandom packet bytes to
 language-model token choices. The LLM never encrypts or receives the secret.
 Anyone with the public address, carrier, exact model and runtime can reconstruct
-the encrypted metadata B; the recipient private key is required to learn the
-length of C and decrypt the message.
+the public length header B and encrypted capsule C. The recipient private key is
+required to authenticate and decrypt C.
 
 There is no email-subject input in the protocol.
 
@@ -19,8 +19,8 @@ The visible carrier has four logical regions:
 
 ```text
 A: 64 observed prefix tokens
-B: fixed 53-byte HPKE metadata capsule
-C: variable HPKE message capsule
+B: canonical public uvarint length header
+C: one variable HPKE message capsule
 D: optional unverified visible finish
 ```
 
@@ -61,40 +61,34 @@ Both parties render this exact fixed prompt before decoding starts.
 ## 5. Prefix binding
 
 The exact A token IDs are serialized as a uint16 count followed by uint32 token
-IDs and hashed under `covermail/prefix-context\0`. Both HPKE capsules bind:
+IDs and hashed under `covermail/prefix-context\0`. The HPKE capsule binds:
 
 ```text
-domain || address_digest || prefix_context_digest
+packet_label || address_digest || prefix_context_digest || exact_B
 ```
 
 Changing A therefore changes both the language-model context and HPKE info.
 
 ## 6. C — encrypted message capsule
 
-The sender first packs the secret into the authenticated inner frame containing
-a random 16-byte message ID, the original UTF-8 length and either raw or DEFLATE
-body bytes. It encrypts that frame with HPKE Base:
+The sender packs the secret into a minimal inner frame containing flags, the
+original UTF-8 length and either raw or DEFLATE body bytes. It encrypts that
+frame once with HPKE Base:
 
 ```text
 DHKEM_X25519_HKDF_SHA256 / HKDF_SHA256 / AES_128_GCM
-domain = "body\0"
+info = packet_label || address_digest || prefix_context_digest || exact_B
 ```
 
-The result C has 48 bytes of HPKE overhead.
+The result C has 48 bytes of HPKE overhead. A 16-byte UI message identifier is
+derived from SHA-256(C); it is not stored in the encrypted plaintext.
 
-## 7. B — fixed encrypted metadata capsule
+## 7. B — public length header
 
-After C exists, the sender constructs the fixed five-byte plaintext:
-
-```text
-uint8 version = 1
-uint32_be len(C)
-```
-
-It encrypts this independently with the same HPKE suite and domain
-`"metadata\0"`. HPKE adds 48 bytes, so B is always exactly 53 bytes.
-
-No visible marker and no fixed token count are used for B.
+Before encrypting C, the sender computes its exact byte length from the inner
+frame and HPKE overhead. B is the canonical unsigned LEB128 encoding of that
+length. B is supplied as HPKE `info`, so any alteration fails authentication.
+No visible marker or fixed token count is used for B.
 
 ## 8. Candidate table and frequencies
 
@@ -123,11 +117,11 @@ a sender-local random virtual suffix. These lookahead bits are not packet data,
 need not be reproduced by the receiver and restore ordinary probabilistic
 sampling after the final real bit has entered the arithmetic decoder.
 
-The receiver initially has a 53-byte target. Once the first 424 bits are
-confirmed, it decrypts B, learns `len(C)`, and changes the target to:
+The receiver first recovers enough complete bytes to parse canonical B. It then
+changes the target to:
 
 ```text
-8 * (53 + len(C))
+8 * (len(B) + len(C))
 ```
 
 without resetting arithmetic state. This is a byte boundary inside one stream,
@@ -153,18 +147,18 @@ The receiver:
 2. takes tokens 0..63 as A;
 3. renders the fixed payload prompt and appends A as assistant prefix;
 4. runs the arithmetic encoder from token 64;
-5. recovers and decrypts fixed B after 424 confirmed bits;
-6. continues the same arithmetic state until `53 + len(C)` bytes are complete;
+5. parses canonical B and learns `len(C)`;
+6. continues the same arithmetic state until `len(B) + len(C)` bytes are complete;
 7. ignores every remaining D token;
-8. authenticates and decrypts C with the exact A token IDs;
+8. authenticates and decrypts C with the exact B, address and A token IDs;
 9. validates and decompresses the inner frame.
 
 Any mismatch inside A/B/C fails closed. D is outside that boundary by design.
 
 ## 12. Limits and policies
 
-Wire-level fixed values are A=64 tokens, B=53 bytes, metadata layout, HPKE
-domains, arithmetic precision and frequency total. Carrier-size guards,
+Wire-level fixed values are A=64 tokens, canonical B encoding, HPKE suite,
+arithmetic precision and frequency total. Carrier-size guards,
 generation timeouts, retry counts, D token budgets and lexical qualification
 filters are local resource or product policies, not decoding rules.
 

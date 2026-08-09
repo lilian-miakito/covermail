@@ -22,11 +22,10 @@ from covermail.codec.generative import (
     generate_prefix_tokens,
 )
 from covermail.cover.transport import canonical_carrier
+from covermail.protocol.packet import parse_header
 from covermail.service import (
-    METADATA_CAPSULE_BYTES,
     EncryptedPacket,
     decrypt_message,
-    decrypt_metadata,
     encrypt_message,
 )
 
@@ -63,8 +62,8 @@ def encode_carrier(
     packet = encrypt_message(address, secret, prefix)
     return encode_carrier_sections(
         prefix,
-        packet.metadata,
-        packet.body,
+        packet.header,
+        packet.capsule,
         payload_model,
         finish_model,
         finish_tokens=finish_tokens,
@@ -83,23 +82,28 @@ def decode_carrier(
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
     on_token: Callable[[CarrierDecodeProgress], None] | None = None,
 ) -> DecodedMessage:
-    def body_length(metadata_capsule: bytes, prefix: tuple[int, ...]) -> int:
-        metadata = decrypt_metadata(address, private_key, metadata_capsule, prefix)
-        return metadata.body_bytes
+    def packet_layout(
+        available: bytes, prefix: tuple[int, ...]
+    ) -> tuple[int, int] | None:
+        del prefix
+        parsed = parse_header(available)
+        if parsed is None:
+            return None
+        capsule_bytes, header_bytes = parsed
+        return header_bytes, capsule_bytes
 
     decoded = decode_carrier_sections(
         canonical_carrier(carrier),
         payload_model,
         prefix_tokens=prefix_tokens,
-        metadata_bytes=METADATA_CAPSULE_BYTES,
-        body_length_resolver=body_length,
+        packet_layout_resolver=packet_layout,
         maximum_characters=maximum_characters,
         on_token=on_token,
     )
     message_id, secret = decrypt_message(
         address,
         private_key,
-        EncryptedPacket(decoded.metadata, decoded.body),
+        EncryptedPacket(decoded.header, decoded.capsule),
         decoded.prefix_token_ids,
     )
     return DecodedMessage(message_id, secret, decoded)

@@ -53,11 +53,8 @@ The current model self-test is recorded in
 - digest: `6fe08caa6a72b092ef4badb3f6670be1bb5e7d164ce4681d123f9bf436d8fbe9`;
 - selected token IDs: `[46634, 1033, 42239, 4098]`.
 
-The committed three-case bundle records exact recovery of the continuous B/C
-packet after an independently sampled A prefix; any following D is ignored.
-The corpus, visible metrics and host timings are recorded in the fixture rather
-than treated as protocol constants. The profile remains a local candidate until
-the result is reproduced across two clean compatible installations.
+The deterministic self-test is current. A compact-packet carrier bundle is
+still required for cross-installation evidence.
 
 ## Exact prompt roles
 

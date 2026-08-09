@@ -33,8 +33,8 @@ from covermail.errors import CovermailError
 from covermail.models.mlx_adapter import MODEL_ID, MODEL_REVISION, MlxLanguageModel
 from covermail.models.profile import LoadedProfile, load_profile
 from covermail.protocol.inner_frame import FLAG_DEFLATE, pack_inner
+from covermail.protocol.packet import pack_header
 from covermail.protocol.varint import decode_uvarint
-from covermail.service import METADATA_CAPSULE_BYTES
 from covermail.web.jobs import Job, JobManager
 
 API_PREFIX = "/api/v1"
@@ -340,18 +340,19 @@ def create_app(
         address = validate_address(request.address)
         _require_supported_address(address, address_template)
         inner = pack_inner(request.secret)
-        original_bytes, varint_bytes = decode_uvarint(inner, 18, max_bytes=3)
-        compressed_bytes = len(inner) - 18 - varint_bytes
-        hpke_overhead = 2 * (HPKE_ENCAPSULATED_KEY_BYTES + HPKE_TAG_BYTES)
-        body_capsule_bytes = len(inner) + HPKE_ENCAPSULATED_KEY_BYTES + HPKE_TAG_BYTES
-        packet_bytes = METADATA_CAPSULE_BYTES + body_capsule_bytes
+        original_bytes, varint_bytes = decode_uvarint(inner, 2, max_bytes=3)
+        compressed_bytes = len(inner) - 2 - varint_bytes
+        hpke_overhead = HPKE_ENCAPSULATED_KEY_BYTES + HPKE_TAG_BYTES
+        capsule_bytes = len(inner) + hpke_overhead
+        header_bytes = len(pack_header(capsule_bytes))
+        packet_bytes = header_bytes + capsule_bytes
         return {
             "plaintext_utf8_bytes": original_bytes,
             "compressed_body_bytes": compressed_bytes,
             "compression_used": bool(inner[1] & FLAG_DEFLATE),
             "hpke_overhead_bytes": hpke_overhead,
-            "metadata_capsule_bytes": METADATA_CAPSULE_BYTES,
-            "body_capsule_bytes": body_capsule_bytes,
+            "header_bytes": header_bytes,
+            "capsule_bytes": capsule_bytes,
             "packet_bytes": packet_bytes,
             "estimated_carrier_tokens": math.ceil(packet_bytes * ESTIMATED_TOKENS_PER_STREAM_BYTE),
             "estimated_characters": math.ceil(packet_bytes * ESTIMATED_CHARACTERS_PER_STREAM_BYTE),
@@ -375,10 +376,10 @@ def create_app(
             job.transition("generating")
             annotations: list[dict[str, Any]] = []
             previous_confirmed = 0
-            metadata_bits = METADATA_CAPSULE_BYTES * 8
+            header_bits = 0
 
             def token(event: CarrierTokenEvent) -> None:
-                nonlocal previous_confirmed
+                nonlocal header_bits, previous_confirmed
                 job.check_cancelled()
                 confirmed_from = previous_confirmed
                 confirmed_to = event.confirmed_bits
@@ -388,13 +389,14 @@ def create_app(
                 elif event.phase == "finish":
                     section = "D"
                     confirmed_from = confirmed_to = previous_confirmed
-                elif confirmed_from < metadata_bits < confirmed_to:
-                    section = "BC"
-                elif confirmed_from < metadata_bits:
+                elif event.phase == "header":
                     section = "B"
+                    header_bits = max(header_bits, confirmed_to)
+                elif confirmed_from < header_bits < confirmed_to:
+                    section = "BC"
                 else:
                     section = "C"
-                if event.phase in {"metadata", "body"}:
+                if event.phase in {"header", "capsule"}:
                     previous_confirmed = confirmed_to
                 annotation = {
                     "token_id": event.token_id,
@@ -432,7 +434,7 @@ def create_app(
             )
             job.transition("validating")
             elapsed = time.perf_counter() - started
-            packet_bytes = len(result.metadata) + len(result.body)
+            packet_bytes = len(result.header) + len(result.capsule)
             return {
                 "carrier": result.text,
                 "packet_bytes": packet_bytes,

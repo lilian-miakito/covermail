@@ -40,8 +40,8 @@ A Covermail carrier has four sections:
 | Section | Contents |
 | --- | --- |
 | A | A 64-token visible prefix generated from the sender's writing brief. It carries no message bits. |
-| B | A fixed 53-byte encrypted metadata capsule containing the length of section C. |
-| C | The encrypted message capsule. |
+| B | A canonical public uvarint containing the byte length of section C. |
+| C | One HPKE capsule containing the framed secret. |
 | D | An optional visible ending ignored by the decoder. |
 
 Sections B and C form one continuous 32-bit arithmetic stream. Their byte boundary does not need to align with a token boundary.
@@ -56,7 +56,7 @@ Covermail uses HPKE Base mode as specified by RFC 9180:
 - HKDF-SHA256;
 - AES-128-GCM.
 
-The metadata and message are encrypted independently. The exact prefix tokens and the recipient's canonical public address are bound to both encrypted capsules.
+The exact public length header, prefix tokens and recipient address are bound to the single encrypted capsule.
 
 Token candidates are derived deterministically from the exact float32 logits of the pinned model revision. The current protocol uses fixed candidate construction and integer frequencies rather than sampling, top-p, beam search or a fixed number of bits per token.
 
@@ -71,17 +71,7 @@ The current real-model profile uses:
 - MLX on Apple Silicon;
 - exact Python and package versions recorded in the public address.
 
-The committed qualification bundle contains three independently generated carriers:
-
-| Measure | Result |
-| --- | --- |
-| Encrypted packet size | 161–164 bytes |
-| Carrier size | 465–495 tokens |
-| Visible characters per encrypted byte | 12.21–13.04 |
-| Generation speed | 17.8–19.2 tokens/s |
-| Exact local recovery | 3/3 carriers |
-
-These figures were measured on the qualification host. Reproduction and bidirectional verification on a second clean installation are still required before claiming cross-installation interoperability.
+The deterministic model self-test is pinned in the public profile. A fresh real-model qualification bundle must be generated for the compact single-capsule packet before claiming cross-installation interoperability.
 
 ## Local application
 

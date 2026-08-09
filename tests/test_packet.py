@@ -4,32 +4,27 @@ import pytest
 
 from covermail.errors import OuterFrameError
 from covermail.protocol.packet import (
-    METADATA_PLAINTEXT_BYTES,
-    pack_metadata,
-    unpack_metadata,
-    validate_body,
+    pack_header,
+    parse_header,
+    unpack_header,
+    validate_packet,
 )
 
 
-def test_fixed_metadata_declares_body_length() -> None:
-    body = b"encrypted body capsule"
-    frame = pack_metadata(body)
-    assert len(frame) == METADATA_PLAINTEXT_BYTES == 5
-    metadata = unpack_metadata(frame)
-    assert metadata.body_bytes == len(body)
-    validate_body(metadata, body)
+def test_canonical_header_declares_capsule_length() -> None:
+    capsule = b"x" * 97
+    header = pack_header(len(capsule))
+    assert header == b"a"
+    assert parse_header(header + capsule) == (len(capsule), 1)
+    assert unpack_header(header) == len(capsule)
+    validate_packet(header, capsule)
 
 
-def test_metadata_rejects_wrong_size_version_length_or_body() -> None:
-    body = b"body"
-    frame = pack_metadata(body)
-    malformed_values = (
-        frame[:-1],
-        bytes([2]) + frame[1:],
-        frame[:1] + b"\0\0\0\0",
-    )
-    for malformed in malformed_values:
-        with pytest.raises(OuterFrameError):
-            unpack_metadata(malformed)
+def test_header_rejects_incomplete_noncanonical_or_wrong_capsule_length() -> None:
+    capsule = b"x" * 97
+    with pytest.raises(OuterFrameError):
+        unpack_header(b"\xe1")
+    with pytest.raises(OuterFrameError):
+        unpack_header(b"\xe1\x00")
     with pytest.raises(OuterFrameError, match="length"):
-        validate_body(unpack_metadata(frame), b"copies")
+        validate_packet(pack_header(len(capsule)), capsule + b"x")

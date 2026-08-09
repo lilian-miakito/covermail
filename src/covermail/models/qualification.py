@@ -20,7 +20,7 @@ from covermail.codec.carrier import encode_carrier
 from covermail.codec.generative import decode_carrier_sections
 from covermail.errors import CarrierGenerationError, CovermailError, ModelCompatibilityError
 from covermail.models.profile import load_profile
-from covermail.service import METADATA_CAPSULE_BYTES
+from covermail.protocol.packet import parse_header
 
 QUALIFICATION_FORMAT = "covermail-model-qualification"
 QUALIFICATION_VERIFICATION_FORMAT = "covermail-model-qualification-verification"
@@ -149,12 +149,15 @@ def _self_test(loaded: object) -> dict[str, object]:
     return {"selected_token_ids": list(result.selected_token_ids), "sha256": result.sha256}
 
 
-def _fixed_body_length(length: int) -> Callable[[bytes, tuple[int, ...]], int]:
-    def resolve(metadata: bytes, prefix_token_ids: tuple[int, ...]) -> int:
-        del metadata, prefix_token_ids
-        return length
-
-    return resolve
+def _packet_layout(
+    available: bytes, prefix_token_ids: tuple[int, ...]
+) -> tuple[int, int] | None:
+    del prefix_token_ids
+    parsed = parse_header(available)
+    if parsed is None:
+        return None
+    capsule_bytes, header_bytes = parsed
+    return header_bytes, capsule_bytes
 
 
 def generate_qualification_bundle(
@@ -216,24 +219,23 @@ def generate_qualification_bundle(
                 result.text,
                 loaded.payload_model,
                 prefix_tokens=cast(int, codec["prefix_tokens"]),
-                metadata_bytes=METADATA_CAPSULE_BYTES,
-                body_length_resolver=_fixed_body_length(len(result.body)),
+                packet_layout_resolver=_packet_layout,
                 maximum_characters=cast(int, cover["max_visible_characters"]),
             )
             if (
                 decoded.prefix_token_ids != result.prefix_token_ids
-                or decoded.metadata != result.metadata
-                or decoded.body != result.body
+                or decoded.header != result.header
+                or decoded.capsule != result.capsule
             ):
                 raise ModelCompatibilityError("qualification packet did not round-trip exactly")
-            packet_bytes = len(result.metadata) + len(result.body)
+            packet_bytes = len(result.header) + len(result.capsule)
             cases.append(
                 {
                     "attempts": trial,
-                    "body_base64url": encode_base64url(result.body),
+                    "capsule_base64url": encode_base64url(result.capsule),
                     "carrier": result.text,
                     "case_id": case.case_id,
-                    "metadata_base64url": encode_base64url(result.metadata),
+                    "header_base64url": encode_base64url(result.header),
                     "prefix_token_ids": list(result.prefix_token_ids),
                     "metrics": {
                         "carrier": asdict(result.metrics),
@@ -315,8 +317,8 @@ def verify_qualification_bundle(
         ):
             raise ModelCompatibilityError("qualification bundle does not use the fixed corpus")
         try:
-            metadata = decode_base64url(cast(str, case["metadata_base64url"]))
-            body = decode_base64url(cast(str, case["body_base64url"]))
+            header = decode_base64url(cast(str, case["header_base64url"]))
+            capsule = decode_base64url(cast(str, case["capsule_base64url"]))
             carrier = cast(str, case["carrier"])
             raw_prefix = case["prefix_token_ids"]
         except Exception as error:
@@ -336,16 +338,15 @@ def verify_qualification_bundle(
                 carrier,
                 loaded.payload_model,
                 prefix_tokens=cast(int, codec["prefix_tokens"]),
-                metadata_bytes=METADATA_CAPSULE_BYTES,
-                body_length_resolver=_fixed_body_length(len(body)),
+                packet_layout_resolver=_packet_layout,
                 maximum_characters=cast(int, cover["max_visible_characters"]),
             )
         except CovermailError as error:
             raise ModelCompatibilityError("qualification carrier could not be decoded") from error
         if (
             decoded.prefix_token_ids != tuple(raw_prefix)
-            or decoded.metadata != metadata
-            or decoded.body != body
+            or decoded.header != header
+            or decoded.capsule != capsule
         ):
             raise ModelCompatibilityError("qualification packet bytes differ")
         elapsed = time.perf_counter() - started

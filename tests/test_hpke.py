@@ -9,12 +9,10 @@ from cryptography.hazmat.primitives.hpke import KEM
 
 from covermail.address.schema import validate_address
 from covermail.crypto.hpke import (
-    BODY_DOMAIN,
     HPKE_ENCAPSULATED_KEY_BYTES,
     HPKE_INFO_LABEL,
     HPKE_SUITE,
     HPKE_TAG_BYTES,
-    METADATA_DOMAIN,
     decrypt_capsule,
     encrypt_capsule,
     hpke_info,
@@ -22,6 +20,7 @@ from covermail.crypto.hpke import (
 from covermail.errors import DecryptionError
 
 PREFIX = tuple(range(32))
+HEADER = b"a"
 
 
 def test_rfc_9180_appendix_a1_base_vector_with_single_shot_empty_aad() -> None:
@@ -43,20 +42,20 @@ def test_capsule_overhead_round_trip_and_freshness(
     address: dict[str, Any], private_key: x25519.X25519PrivateKey
 ) -> None:
     validated = validate_address(address)
-    first = encrypt_capsule(validated, b"packet", PREFIX, BODY_DOMAIN)
-    second = encrypt_capsule(validated, b"packet", PREFIX, BODY_DOMAIN)
+    first = encrypt_capsule(validated, b"packet", PREFIX, HEADER)
+    second = encrypt_capsule(validated, b"packet", PREFIX, HEADER)
     assert KEM.X25519.enc_length() == HPKE_ENCAPSULATED_KEY_BYTES == 32
     assert len(first) == 6 + HPKE_ENCAPSULATED_KEY_BYTES + HPKE_TAG_BYTES
     assert first != second
-    assert decrypt_capsule(validated, private_key, first, PREFIX, BODY_DOMAIN) == b"packet"
+    assert decrypt_capsule(validated, private_key, first, PREFIX, HEADER) == b"packet"
 
 
-def test_info_binds_address_prefix_and_domain(address: dict[str, Any]) -> None:
+def test_info_binds_address_prefix_and_header(address: dict[str, Any]) -> None:
     validated = validate_address(address)
-    body_info = hpke_info(validated, PREFIX, BODY_DOMAIN)
-    assert body_info.startswith(HPKE_INFO_LABEL + BODY_DOMAIN)
-    assert body_info != hpke_info(validated, PREFIX, METADATA_DOMAIN)
-    assert body_info != hpke_info(validated, (*PREFIX[:-1], 99), BODY_DOMAIN)
+    packet_info = hpke_info(validated, PREFIX, HEADER)
+    assert packet_info.startswith(HPKE_INFO_LABEL)
+    assert packet_info != hpke_info(validated, PREFIX, b"b")
+    assert packet_info != hpke_info(validated, (*PREFIX[:-1], 99), HEADER)
 
 
 @pytest.mark.parametrize("failure", ["wrong-key", "tamper", "wrong-address", "wrong-prefix"])
@@ -64,7 +63,7 @@ def test_authentication_failures_are_generic(
     address: dict[str, Any], private_key: x25519.X25519PrivateKey, failure: str
 ) -> None:
     validated = validate_address(address)
-    capsule = encrypt_capsule(validated, b"secret", PREFIX, BODY_DOMAIN)
+    capsule = encrypt_capsule(validated, b"secret", PREFIX, HEADER)
     decrypt_address = validated
     decrypt_key = private_key
     prefix = PREFIX
@@ -79,4 +78,4 @@ def test_authentication_failures_are_generic(
     else:
         prefix = (*PREFIX[:-1], 99)
     with pytest.raises(DecryptionError, match="not an authentic"):
-        decrypt_capsule(decrypt_address, decrypt_key, capsule, prefix, BODY_DOMAIN)
+        decrypt_capsule(decrypt_address, decrypt_key, capsule, prefix, HEADER)

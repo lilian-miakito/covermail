@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import secrets
 import zlib
-from collections.abc import Callable
 
 from covermail.errors import InnerFrameError
 from covermail.protocol.varint import decode_uvarint, encode_uvarint
@@ -12,10 +10,9 @@ from covermail.protocol.varint import decode_uvarint, encode_uvarint
 INNER_VERSION = 1
 FLAG_DEFLATE = 0x01
 MAX_SECRET_UTF8_BYTES = 65535
-MESSAGE_ID_BYTES = 16
 
 
-def pack_inner(text: str, *, random_bytes: Callable[[int], bytes] = secrets.token_bytes) -> bytes:
+def pack_inner(text: str) -> bytes:
     try:
         plaintext = text.encode("utf-8", errors="strict")
     except UnicodeEncodeError as error:
@@ -32,10 +29,7 @@ def pack_inner(text: str, *, random_bytes: Callable[[int], bytes] = secrets.toke
         flags = 0
         body = plaintext
 
-    message_id = random_bytes(MESSAGE_ID_BYTES)
-    if len(message_id) != MESSAGE_ID_BYTES:
-        raise InnerFrameError("random source returned an invalid message ID")
-    return bytes([INNER_VERSION, flags]) + message_id + encode_uvarint(len(plaintext)) + body
+    return bytes([INNER_VERSION, flags]) + encode_uvarint(len(plaintext)) + body
 
 
 def _decompress_exact(body: bytes, original_len: int) -> bytes:
@@ -54,8 +48,8 @@ def _decompress_exact(body: bytes, original_len: int) -> bytes:
     return plaintext
 
 
-def unpack_inner(frame: bytes) -> tuple[bytes, str]:
-    if len(frame) < 19:
+def unpack_inner(frame: bytes) -> str:
+    if len(frame) < 3:
         raise InnerFrameError("inner frame too short")
     version, flags = frame[0], frame[1]
     if version != INNER_VERSION:
@@ -63,14 +57,13 @@ def unpack_inner(frame: bytes) -> tuple[bytes, str]:
     if flags & ~FLAG_DEFLATE:
         raise InnerFrameError("reserved inner flags are set")
 
-    message_id = frame[2:18]
     try:
-        original_len, consumed = decode_uvarint(frame, 18, max_bytes=3)
+        original_len, consumed = decode_uvarint(frame, 2, max_bytes=3)
     except (EOFError, ValueError) as error:
         raise InnerFrameError("invalid inner plaintext length") from error
     if original_len > MAX_SECRET_UTF8_BYTES:
         raise InnerFrameError("declared plaintext exceeds limit")
-    body = frame[18 + consumed :]
+    body = frame[2 + consumed :]
 
     plaintext = _decompress_exact(body, original_len) if flags & FLAG_DEFLATE else body
     if len(plaintext) != original_len:
@@ -79,4 +72,4 @@ def unpack_inner(frame: bytes) -> tuple[bytes, str]:
         text = plaintext.decode("utf-8", errors="strict")
     except UnicodeDecodeError as error:
         raise InnerFrameError("inner plaintext is not valid UTF-8") from error
-    return message_id, text
+    return text

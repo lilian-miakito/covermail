@@ -70,7 +70,7 @@
             <label>Instructions for the visible opening<textarea id="write-prompt" rows="4" maxlength="4096" required>Write to a close friend with specific news about the garden, in a calm and natural tone.</textarea></label>
             <div class="section-label"><span>3</span> Secret message</div>
             <label>Confidential content<textarea id="write-secret" rows="7" maxlength="65535" placeholder="This text is never sent to the model." required></textarea></label>
-            <div class="budget" id="budget"><span><b id="budget-plain">0</b> secret bytes</span><span><b id="budget-compressed">—</b> useful bytes after compression</span><span><b id="budget-hpke">96</b> HPKE bytes</span><span><b id="budget-stream">—</b> B+C bytes</span><span><b id="budget-tokens">—</b> estimated tokens</span><span><b id="budget-chars">—</b> estimated characters</span></div>
+            <div class="budget" id="budget"><span><b id="budget-plain">0</b> secret bytes</span><span><b id="budget-compressed">—</b> useful bytes after compression</span><span><b id="budget-hpke">48</b> HPKE bytes</span><span><b id="budget-stream">—</b> B+C bytes</span><span><b id="budget-tokens">—</b> estimated tokens</span><span><b id="budget-chars">—</b> estimated characters</span></div>
             <label class="check"><input id="live-preview" type="checkbox" checked> Show tokens as they are generated.</label>
             <button class="primary" type="submit">Encrypt and generate</button>
             <p class="form-status" id="write-status" role="status"></p>
@@ -80,7 +80,7 @@
             <div class="progress"><span id="encode-progress"></span></div>
             <div class="protocol-legend" aria-label="Section legend">
               <span class="legend-a"><b>A</b> free prefix</span>
-              <span class="legend-b"><b>B</b> metadata</span>
+              <span class="legend-b"><b>B</b> length header</span>
               <span class="legend-c"><b>C</b> ciphertext</span>
               <span class="legend-d"><b>D</b> ignored finish</span>
             </div>

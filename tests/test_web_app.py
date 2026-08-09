@@ -139,8 +139,8 @@ def test_full_web_identity_encode_stream_and_decode_round_trip(
             },
         )
         assert estimate.status_code == 200
-        assert estimate.json()["packet_bytes"] > 53
-        assert estimate.json()["hpke_overhead_bytes"] == 96
+        assert estimate.json()["packet_bytes"] > 49
+        assert estimate.json()["hpke_overhead_bytes"] == 48
         assert estimate.json()["compressed_body_bytes"] > 0
 
         encode = client.post(

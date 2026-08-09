@@ -3,9 +3,10 @@
 The normative boundaries are stated in [section 1 of the protocol](protocol.md#1-purpose-and-boundaries).
 
 Covermail protects the authenticated inner plaintext with RFC 9180 HPKE Base.
-Both encrypted capsules bind the full canonical public address and the exact 64
-visible A token IDs. B and C are hidden in deterministic Ministral token choices;
-the LLM is a steganographic transport, not the cipher.
+The single encrypted capsule binds the canonical public address, exact public
+length header B and exact 64 visible A token IDs. B and C are encoded in
+deterministic Ministral token choices; the LLM is a steganographic transport,
+not the cipher.
 
 The sender-only writing brief, A sampling seed and local D finish policy are
 not authenticated protocol inputs. D is deliberately ignored by the decoder

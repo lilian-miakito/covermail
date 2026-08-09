@@ -16,18 +16,16 @@ from covermail.protocol.inner_frame import (
 )
 from covermail.protocol.varint import encode_uvarint
 
-MESSAGE_ID = bytes(range(16))
-
 
 @pytest.mark.parametrize("text", ["", "bonjour", "émoji 😀", "a" * 1000])
 def test_inner_round_trip(text: str) -> None:
-    frame = pack_inner(text, random_bytes=lambda size: MESSAGE_ID)
-    assert unpack_inner(frame) == (MESSAGE_ID, text)
+    frame = pack_inner(text)
+    assert unpack_inner(frame) == text
 
 
 def test_compression_is_used_only_when_shorter() -> None:
-    compressed = pack_inner("a" * 1000, random_bytes=lambda size: MESSAGE_ID)
-    raw = pack_inner("x", random_bytes=lambda size: MESSAGE_ID)
+    compressed = pack_inner("a" * 1000)
+    raw = pack_inner("x")
     assert compressed[1] == FLAG_DEFLATE
     assert raw[1] == 0
 
@@ -35,8 +33,8 @@ def test_compression_is_used_only_when_shorter() -> None:
 @given(st.text(alphabet=st.characters(codec="utf-8"), max_size=2000))
 @settings(max_examples=100)
 def test_unicode_property_round_trip(text: str) -> None:
-    frame = pack_inner(text, random_bytes=lambda size: MESSAGE_ID)
-    assert unpack_inner(frame) == (MESSAGE_ID, text)
+    frame = pack_inner(text)
+    assert unpack_inner(frame) == text
 
 
 def test_secret_limit() -> None:
@@ -50,18 +48,18 @@ def test_secret_limit() -> None:
         lambda frame: b"",
         lambda frame: bytes([2]) + frame[1:],
         lambda frame: frame[:1] + b"\x80" + frame[2:],
-        lambda frame: frame[:18] + b"\x80\x00" + frame[19:],
+        lambda frame: frame[:2] + b"\x80\x00" + frame[3:],
         lambda frame: frame[:-1],
     ],
 )
 def test_malformed_frames_fail(mutate: object) -> None:
-    frame = pack_inner("hello", random_bytes=lambda size: MESSAGE_ID)
+    frame = pack_inner("hello")
     with pytest.raises(InnerFrameError):
         unpack_inner(mutate(frame))  # type: ignore[operator]
 
 
 def _compressed_frame(plaintext_len: int, compressed_body: bytes) -> bytes:
-    return b"\x01\x01" + MESSAGE_ID + encode_uvarint(plaintext_len) + compressed_body
+    return b"\x01\x01" + encode_uvarint(plaintext_len) + compressed_body
 
 
 def test_rejects_decompression_bomb() -> None:
@@ -86,13 +84,13 @@ def test_rejects_truncated_compressed_data() -> None:
 
 
 def test_rejects_invalid_utf8() -> None:
-    frame = b"\x01\x00" + MESSAGE_ID + b"\x01\xff"
+    frame = b"\x01\x00\x01\xff"
     with pytest.raises(InnerFrameError, match="UTF-8"):
         unpack_inner(frame)
 
 
 def test_rejects_wrong_declared_raw_length() -> None:
-    frame = b"\x01\x00" + MESSAGE_ID + b"\x02x"
+    frame = b"\x01\x00\x02x"
     with pytest.raises(InnerFrameError, match="length mismatch"):
         unpack_inner(frame)
 

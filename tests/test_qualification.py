@@ -88,14 +88,14 @@ def test_bundle_verification_rejects_non_fixed_or_modified_evidence(
     bundle = generate_qualification_bundle(address, tmp_path)
     modified = copy.deepcopy(bundle)
     modified_cases = cast(list[dict[str, Any]], modified["cases"])
-    modified_cases[0]["writing_brief"] = "Un autre brief"
+    modified_cases[0]["writing_brief"] = "A different brief"
 
     with pytest.raises(ModelCompatibilityError, match="fixed corpus"):
         verify_qualification_bundle(address, tmp_path, modified)
 
     modified = copy.deepcopy(bundle)
     modified_cases = cast(list[dict[str, Any]], modified["cases"])
-    modified_cases[0]["metadata_base64url"] = "AA"
+    modified_cases[0]["header_base64url"] = "AA"
     with pytest.raises(ModelCompatibilityError):
         verify_qualification_bundle(address, tmp_path, modified)
 

@@ -202,9 +202,9 @@ def _carrier_encode(args: argparse.Namespace) -> int:
             "characters": len(result.text),
             "elapsed_seconds": elapsed,
             "generated_tokens_per_second": len(result.token_ids) / elapsed,
-            "k_all": len(result.text) / (len(result.metadata) + len(result.body)),
+            "k_all": len(result.text) / (len(result.header) + len(result.capsule)),
             "metrics": asdict(result.metrics),
-            "packet_bytes": len(result.metadata) + len(result.body),
+            "packet_bytes": len(result.header) + len(result.capsule),
             "tokens": len(result.token_ids),
             "utf8_bytes": len(result.text.encode("utf-8")),
         }

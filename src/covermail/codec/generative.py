@@ -23,7 +23,7 @@ DEFAULT_PREFIX_TOKENS = 64
 DEFAULT_FINISH_TOKENS = 128
 MAX_FAKE_CARRIER_CHARACTERS = 200_000
 
-CarrierPhase = Literal["prefix", "metadata", "body", "finish"]
+CarrierPhase = Literal["prefix", "header", "capsule", "finish"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,8 +31,8 @@ class CarrierMetrics:
     prefix_tokens: int
     payload_tokens: int
     finish_tokens: int
-    metadata_bits: int
-    body_bits: int
+    header_bits: int
+    capsule_bits: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,16 +40,16 @@ class CarrierResult:
     text: str
     token_ids: tuple[int, ...]
     prefix_token_ids: tuple[int, ...]
-    metadata: bytes
-    body: bytes
+    header: bytes
+    capsule: bytes
     metrics: CarrierMetrics
 
 
 @dataclass(frozen=True, slots=True)
 class DecodedCarrier:
     prefix_token_ids: tuple[int, ...]
-    metadata: bytes
-    body: bytes
+    header: bytes
+    capsule: bytes
     consumed_tokens: int
     total_tokens: int
 
@@ -69,7 +69,7 @@ class CarrierTokenEvent:
 class CarrierDecodeProgress:
     processed_tokens: int
     total_tokens: int
-    phase: Literal["metadata", "body"]
+    phase: Literal["header", "capsule"]
     recovered_bits: int
     target_bits: int
 
@@ -132,15 +132,15 @@ def generate_prefix_tokens(
 
 
 def _encode_payload(
-    metadata: bytes,
-    body: bytes,
+    header: bytes,
+    capsule: bytes,
     model: TokenModel,
     token_ids: list[int],
     on_token: Callable[[CarrierTokenEvent], None] | None,
 ) -> int:
-    if not metadata or not body:
-        raise CarrierGenerationError("metadata and body sections must be non-empty")
-    data = metadata + body
+    if not header or not capsule:
+        raise CarrierGenerationError("header and capsule sections must be non-empty")
+    data = header + capsule
     source = FramedBitSource(data, lambda offset: secrets.randbits(1))
     read_offset = 0
 
@@ -174,8 +174,8 @@ def _encode_payload(
         token_ids.append(selected.token_id)
         section_tokens += 1
         if on_token is not None:
-            phase: Literal["metadata", "body"] = (
-                "metadata" if confirmed <= len(metadata) * 8 else "body"
+            phase: Literal["header", "capsule"] = (
+                "header" if confirmed <= len(header) * 8 else "capsule"
             )
             on_token(
                 CarrierTokenEvent(
@@ -195,8 +195,8 @@ def _encode_payload(
 
 def encode_carrier_sections(
     prefix_token_ids: Sequence[int],
-    metadata: bytes,
-    body: bytes,
+    header: bytes,
+    capsule: bytes,
     payload_model: TokenModel,
     finish_model: GreedyTokenModel,
     *,
@@ -204,11 +204,11 @@ def encode_carrier_sections(
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
     on_token: Callable[[CarrierTokenEvent], None] | None = None,
 ) -> CarrierResult:
-    """Encode fixed B and variable C, then append an unverified local finish D."""
+    """Encode public header B and encrypted capsule C, then append local finish D."""
     if finish_tokens < 0:
         raise ValueError("finish token budget cannot be negative")
     token_ids = list(prefix_token_ids)
-    payload_tokens = _encode_payload(metadata, body, payload_model, token_ids, on_token)
+    payload_tokens = _encode_payload(header, capsule, payload_model, token_ids, on_token)
     added_finish = 0
     while added_finish < finish_tokens:
         selected = finish_model.next_greedy_token(token_ids)
@@ -235,14 +235,14 @@ def encode_carrier_sections(
         text,
         tuple(token_ids),
         tuple(prefix_token_ids),
-        metadata,
-        body,
+        header,
+        capsule,
         CarrierMetrics(
             len(prefix_token_ids),
             payload_tokens,
             added_finish,
-            len(metadata) * 8,
-            len(body) * 8,
+            len(header) * 8,
+            len(capsule) * 8,
         ),
     )
 
@@ -250,14 +250,15 @@ def encode_carrier_sections(
 def _decode_payload(
     observed: Sequence[int],
     start: int,
-    metadata_bytes: int,
     model: TokenModel,
     visible_prefix: list[int],
-    body_length_resolver: Callable[[bytes, tuple[int, ...]], int],
+    packet_layout_resolver: Callable[
+        [bytes, tuple[int, ...]], tuple[int, int] | None
+    ],
     prefix_token_ids: tuple[int, ...],
     on_token: Callable[[CarrierDecodeProgress], None] | None,
 ) -> tuple[bytes, bytes, int]:
-    metadata_bits = metadata_bytes * 8
+    header_bytes: int | None = None
     target_bits: int | None = None
     collector = BitCollector()
 
@@ -281,15 +282,20 @@ def _decode_payload(
             raise CarrierArithmeticError("payload token is outside its candidate table")
         encoder.symbol(candidate_index, table.cumulative)
         visible_prefix.append(token_id)
-        if target_bits is None and collector.count >= metadata_bits:
-            metadata = collector.complete_bytes()[:metadata_bytes]
-            body_bytes = body_length_resolver(metadata, prefix_token_ids)
-            if body_bytes <= 0:
-                raise CarrierArithmeticError("metadata declared an invalid body length")
-            target_bits = (metadata_bytes + body_bytes) * 8
+        if target_bits is None and collector.count >= 8:
+            layout = packet_layout_resolver(collector.complete_bytes(), prefix_token_ids)
+            if layout is not None:
+                header_bytes, capsule_bytes = layout
+                if header_bytes <= 0 or capsule_bytes <= 0:
+                    raise CarrierArithmeticError("packet declared an invalid section length")
+                target_bits = (header_bytes + capsule_bytes) * 8
         if on_token is not None:
-            phase: Literal["metadata", "body"] = "metadata" if target_bits is None else "body"
-            progress_target = target_bits or metadata_bits
+            phase: Literal["header", "capsule"] = (
+                "header"
+                if header_bytes is None or collector.count <= header_bytes * 8
+                else "capsule"
+            )
+            progress_target = target_bits or 8
             on_token(
                 CarrierDecodeProgress(
                     index + 1,
@@ -300,9 +306,10 @@ def _decode_payload(
                 )
             )
         if target_bits is not None and collector.count >= target_bits:
+            assert header_bytes is not None
             complete = collector.complete_bytes()[: target_bits // 8]
-            return complete[:metadata_bytes], complete[metadata_bytes:], index + 1
-    raise CarrierArithmeticError("carrier ended before complete B/C payload")
+            return complete[:header_bytes], complete[header_bytes:], index + 1
+    raise CarrierArithmeticError("carrier ended before the complete B/C packet")
 
 
 def decode_carrier_sections(
@@ -310,12 +317,13 @@ def decode_carrier_sections(
     payload_model: TokenModel,
     *,
     prefix_tokens: int,
-    metadata_bytes: int,
-    body_length_resolver: Callable[[bytes, tuple[int, ...]], int],
+    packet_layout_resolver: Callable[
+        [bytes, tuple[int, ...]], tuple[int, int] | None
+    ],
     maximum_characters: int = MAX_FAKE_CARRIER_CHARACTERS,
     on_token: Callable[[CarrierDecodeProgress], None] | None = None,
 ) -> DecodedCarrier:
-    """Recover B/C and deliberately ignore every trailing D token."""
+    """Recover public header B and encrypted capsule C, then ignore D."""
     _validate_carrier_structure(carrier, maximum_characters=maximum_characters)
     observed = payload_model.tokenize(carrier)
     if payload_model.detokenize(observed) != carrier:
@@ -324,14 +332,13 @@ def decode_carrier_sections(
         raise CarrierStructureError("carrier ends inside its observed prefix")
     prefix = tuple(observed[:prefix_tokens])
     visible_prefix = list(prefix)
-    metadata, body, body_end = _decode_payload(
+    header, capsule, packet_end = _decode_payload(
         observed,
         prefix_tokens,
-        metadata_bytes,
         payload_model,
         visible_prefix,
-        body_length_resolver,
+        packet_layout_resolver,
         prefix,
         on_token,
     )
-    return DecodedCarrier(prefix, metadata, body, body_end, len(observed))
+    return DecodedCarrier(prefix, header, capsule, packet_end, len(observed))
