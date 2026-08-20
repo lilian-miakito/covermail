@@ -14,7 +14,7 @@ from covermail.models.mlx_adapter import (
 
 
 def test_real_profile_address_fixture_is_complete_and_valid() -> None:
-    directory = Path(__file__).parent / "fixtures/mlx_ministral3_8b_instruct_4bit"
+    directory = Path(__file__).parent / "fixtures/mlx_qwen35_4b_4bit"
     address = validate_address(read_address_file(directory / "address.json"))
     assert address["model"]["model_id"] == MODEL_ID
     assert address["model"]["revision"] == MODEL_REVISION

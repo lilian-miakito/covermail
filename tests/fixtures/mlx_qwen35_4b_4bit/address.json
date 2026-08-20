@@ -7,7 +7,7 @@
     "logit_scale": 1024,
     "prompt_template": "cm-packet-email",
     "self_test": {
-      "expected_sha256": "6fe08caa6a72b092ef4badb3f6670be1bb5e7d164ce4681d123f9bf436d8fbe9",
+      "expected_sha256": "5dfd5495624ceee24c01033e4d5cb7c096892cdbaaf1f8ba2db3a11fe982819e",
       "path_indices": [0, 1, 19, 0],
       "steps": 4
     },
@@ -35,43 +35,38 @@
     "artifacts": [
       {
         "path": "chat_template.jinja",
-        "sha256": "215fb003a8e13d40e26587f89951f26eac71bb32ddeac209bcbb8161df9e315f",
-        "size": 7759
+        "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+        "size": 7756
       },
       {
         "path": "config.json",
-        "sha256": "390032313a9203fb1dfadfadd75bdceb46ea5409878c88cf34b96cd3739d6f28",
-        "size": 1986
+        "sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa",
+        "size": 3366
       },
       {
-        "path": "model-00001-of-00002.safetensors",
-        "sha256": "0b7c0de8f4da647f054095add6d93c1cfdd7f7f38128ecb666ebace634169aa6",
-        "size": 5294694324
-      },
-      {
-        "path": "model-00002-of-00002.safetensors",
-        "sha256": "aa49bdcf4394ab16f0cbd45b750313978073f514da8b56e802ee3c7568b3a865",
-        "size": 301990235
+        "path": "model.safetensors",
+        "sha256": "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db",
+        "size": 3034300695
       },
       {
         "path": "model.safetensors.index.json",
-        "sha256": "91360719f4ce9383f46bb5750cd0b8cb4aec070dd8804c11ed94585a9924409b",
-        "size": 103195
+        "sha256": "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a",
+        "size": 101944
       },
       {
         "path": "tokenizer.json",
-        "sha256": "286acad9b0e27fce778ac429763536accf618ccb6ed72963b6f94685e531c5c7",
-        "size": 17077402
+        "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
+        "size": 19989343
       },
       {
         "path": "tokenizer_config.json",
-        "sha256": "54b6ee53caf87c338527472386b6adcc4253bf48b93cc9c27fe1d25db4ff36fc",
-        "size": 21188
+        "sha256": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
+        "size": 1139
       }
     ],
     "backend": "mlx-lm",
-    "model_id": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
-    "revision": "182f003f01daa75f9de0f2c4d379722fd0bc1c61",
+    "model_id": "mlx-community/Qwen3.5-4B-4bit",
+    "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
     "runtime": {
       "logits_dtype": "float32",
       "packages": {
@@ -84,13 +79,13 @@
         "transformers": "5.14.1"
       },
       "profile": "darwin-arm64-mlx",
-      "python_version": "3.12.5",
+      "python_version": "3.12.8",
       "trust_remote_code": false
     }
   },
   "recipient": {
     "hpke_public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
-    "label": "Alice Ministral local fixture"
+    "label": "Alice Qwen local fixture"
   },
   "version": 1
 }
