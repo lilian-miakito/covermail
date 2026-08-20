@@ -136,7 +136,7 @@ function scheduleEstimate() {
 ["write-prompt", "write-secret"].forEach((id) => byId(id).addEventListener("input", scheduleEstimate));
 
 function stateLabel(value) {
-  return ({queued: "Queued", framing: "Encrypting", loading_model: "Loading Ministral", generating: "Generating", validating: "Validating", decoding: "Decoding", unlocking: "Unlocking", complete: "Complete", failed: "Failed", cancelled: "Cancelled"})[value] || value;
+  return ({queued: "Queued", framing: "Encrypting", loading_model: "Loading Qwen 3.5", generating: "Generating", validating: "Validating", decoding: "Decoding", unlocking: "Unlocking", complete: "Complete", failed: "Failed", cancelled: "Cancelled"})[value] || value;
 }
 
 function resetProtocolView() {
@@ -145,7 +145,7 @@ function resetProtocolView() {
   visual.classList.add("empty");
   const placeholder = document.createElement("span");
   placeholder.className = "visual-placeholder";
-  placeholder.textContent = "Tokens chosen with Ministral will appear here with their section.";
+  placeholder.textContent = "Tokens chosen with Qwen 3.5 will appear here with their section.";
   visual.append(placeholder);
   Object.keys(sectionCounts).forEach((section) => {
     sectionCounts[section] = 0;

@@ -8,7 +8,7 @@ The language model never sees the plaintext and provides no cryptographic securi
 
 1. The recipient creates an encrypted local identity and shares a public Covermail address.
 2. The sender encrypts a UTF-8 message with the recipient's public key.
-3. An arithmetic codec maps the encrypted packet to valid token choices from a local Ministral model.
+3. An arithmetic codec maps the encrypted packet to valid token choices from a local Qwen 3.5 model.
 4. The resulting carrier can be copied and sent as ordinary text.
 5. The recipient replays the same token distributions, recovers the packet and decrypts the message.
 
@@ -16,7 +16,7 @@ The language model never sees the plaintext and provides no cryptographic securi
 secret
   → HPKE encryption
   → encrypted packet
-  → arithmetic coding over Ministral token probabilities
+  → arithmetic coding over Qwen 3.5 token probabilities
   → visible carrier text
 ```
 
@@ -27,7 +27,7 @@ Both sides must use the exact model, runtime and protocol parameters pinned by t
 - the Covermail protocol implementation;
 - HPKE recipient identities and portable public addresses;
 - deterministic arithmetic encoding over model token distributions;
-- a pinned Ministral 3 Instruct profile for MLX on Apple Silicon;
+- a pinned Qwen 3.5 4B profile for MLX on Apple Silicon;
 - a command-line interface;
 - a local FastAPI application;
 - model qualification and cross-installation verification tools;
@@ -66,12 +66,46 @@ The normative details are documented in [docs/protocol.md](docs/protocol.md).
 
 The current real-model profile uses:
 
-- `mlx-community/Ministral-3-8B-Instruct-2512-4bit`;
-- revision `182f003f01daa75f9de0f2c4d379722fd0bc1c61`;
+- `mlx-community/Qwen3.5-4B-4bit`;
+- revision `0e7ffd5c629ef7719d4cbc04069232580bfa9d9c`;
 - MLX on Apple Silicon;
-- exact Python and package versions recorded in the public address.
+- exact model artifact hashes, Python version and package versions recorded in the public address.
 
 The deterministic model self-test is pinned in the public profile. A fresh real-model qualification bundle must be generated for the compact single-capsule packet before claiming cross-installation interoperability.
+
+## Public address as interoperability contract
+
+The public address records every input that must remain identical for deterministic
+decoding: model ID, immutable revision, SHA-256 and size of each model artifact,
+runtime package versions, codec parameters, cover profile and model self-test.
+Changing one of those values produces a different address and fails closed before
+carrier processing.
+
+The current address is canonical JSON. It contains the recipient's X25519 public
+key and the public model profile, never the private key or passphrase.
+
+An abridged public address looks like this:
+
+```json
+{
+  "format": "covermail-address",
+  "version": 1,
+  "recipient": {
+    "label": "Alice",
+    "hpke_public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw"
+  },
+  "model": {
+    "backend": "mlx-lm",
+    "model_id": "mlx-community/Qwen3.5-4B-4bit",
+    "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c"
+  }
+}
+```
+
+The complete address also includes the HPKE suite, artifact hashes, runtime
+versions, codec parameters, cover profile and model self-test. Use the complete
+exported JSON when sending a message; the shortened example above is not
+importable.
 
 ## Local application
 
@@ -81,10 +115,26 @@ Install the project and the MLX dependencies:
 uv sync --extra dev --extra mlx
 ```
 
-With the qualified model already prepared locally:
+Download the immutable model snapshot, then materialize only the artifacts named
+by the active profile:
 
 ```bash
-MODEL_ROOT=.covermail/models/mlx-community--Ministral-3-8B-Instruct-2512-4bit/182f003f01daa75f9de0f2c4d379722fd0bc1c61
+SNAPSHOT_ROOT=.covermail/snapshots/qwen35-4b
+MODEL_ROOT=.covermail/models/mlx-community--Qwen3.5-4B-4bit/0e7ffd5c629ef7719d4cbc04069232580bfa9d9c
+
+uv run hf download mlx-community/Qwen3.5-4B-4bit \
+  --revision 0e7ffd5c629ef7719d4cbc04069232580bfa9d9c \
+  --local-dir "$SNAPSHOT_ROOT"
+
+uv run covermail model-prepare \
+  --source "$SNAPSHOT_ROOT" \
+  --destination "$MODEL_ROOT"
+```
+
+Start the application with that qualified model tree:
+
+```bash
+MODEL_ROOT=.covermail/models/mlx-community--Qwen3.5-4B-4bit/0e7ffd5c629ef7719d4cbc04069232580bfa9d9c
 
 uv run covermail app --model-root "$MODEL_ROOT"
 ```
@@ -104,11 +154,31 @@ It binds to `127.0.0.1`, serves no remote assets and uses no browser storage, co
 
 ## Command-line round trip
 
+For example, Bob can hide this message for Alice:
+
+```text
+Meet at noon.
+```
+
+The beginning of the visible carrier may read:
+
+```text
+Hey Alice,
+
+Just wanted to let you know that the plumber had to reschedule our Saturday appointment. I think it's getting moved to next week, so we might have to find a new date soon.
+
+On the bright side, does Sunday still work for our coffee? I was hoping to catch up properly once we get that fixed. Let me know, just so we can adjust accordingly.
+```
+
+This excerpt is shortened for readability and cannot be decoded on its own.
+Alice receives the complete carrier, replays the pinned Qwen 3.5 token
+distributions and opens the recovered HPKE capsule with her private key.
+
 Create a recipient identity:
 
 ```bash
 uv run covermail identity-create \
-  tests/fixtures/mlx_ministral3_8b_instruct_4bit/address.json \
+  tests/fixtures/mlx_qwen35_4b_4bit/address.json \
   --identities-dir .covermail/identities \
   --public-address alice.covermail.json
 ```
@@ -142,7 +212,7 @@ Generate a real-model qualification bundle and verify every carrier locally:
 
 ```bash
 uv run covermail model-qualify \
-  tests/fixtures/mlx_ministral3_8b_instruct_4bit/address.json \
+  tests/fixtures/mlx_qwen35_4b_4bit/address.json \
   --model-root "$MODEL_ROOT" \
   --output qualification-host-a.json
 ```
@@ -151,7 +221,7 @@ Verify the bundle on a second compatible installation:
 
 ```bash
 uv run covermail model-qualify \
-  tests/fixtures/mlx_ministral3_8b_instruct_4bit/address.json \
+  tests/fixtures/mlx_qwen35_4b_4bit/address.json \
   --model-root "$MODEL_ROOT" \
   --verify-bundle qualification-host-a.json \
   --output verification-host-b.json

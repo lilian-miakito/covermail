@@ -5,7 +5,7 @@ The normative boundaries are stated in [section 1 of the protocol](protocol.md#1
 Covermail protects the authenticated inner plaintext with RFC 9180 HPKE Base.
 The single encrypted capsule binds the canonical public address, exact public
 length header B and exact 64 visible A token IDs. B and C are encoded in
-deterministic Ministral token choices; the LLM is a steganographic transport,
+deterministic Qwen 3.5 token choices; the LLM is a steganographic transport,
 not the cipher.
 
 The sender-only writing brief, A sampling seed and local D finish policy are

@@ -30,7 +30,7 @@ boundary does not need to coincide with a token boundary.
 ## 3. Public address
 
 The address is strict canonical JSON. It pins the recipient X25519 public key,
-exact Ministral model revision and artifacts, runtime packages, cover persona,
+exact Qwen 3.5 model revision and artifacts, runtime packages, cover persona,
 candidate construction, arithmetic parameters, prompt `cm-packet-email`, 64
 prefix tokens, and the model self-test. Unknown or missing fields fail closed.
 
